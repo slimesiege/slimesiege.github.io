@@ -18,7 +18,7 @@
 <script>
 (() => {
 "use strict";
-const VERSION = "v1.47"; // bump on every change: v1.45 -> v1.47 (Cowboy on the spider, 3 separate orbs, Luck upgrade)
+const VERSION = "v1.48"; // Manual King summons, Slimecaller wizard, spider cobwebs and Luck rarity boost
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -139,8 +139,9 @@ const CATALOG = [
   { name: "Orbi", title: "the Collector", role: "buff", color: "#ff9bd8", hat: "#7a2a6a", kind: "grabber", ab: "Orb Grab", d: "Flies out and grabs the orbs enemies drop" },
   { name: "Rad", title: "the Reactor", role: "attack", color: "#b6ff6a", hat: "#2a5a10", kind: "reactor", ab: "Meltdown", d: "Triggers a nuclear meltdown when swarmed (costs half your HP, 150s cooldown)" },
   { name: "Lucky", title: "the Gambler", role: "buff", color: "#ffc83a", hat: "#6a4a08", kind: "xpaura", ab: "Lucky Charm", d: "+25% XP from gems" },
+  { name: "Moss", title: "the Slimecaller", role: "attack", color: "#8cf08c", hat: "#245c2a", kind: "slimecaller", ab: "Slime Summon", d: "Summons friendly slimes that attack nearby foes and focus the Slime King" },
 ];
-const UNLOCK_LV = { Atlas: 0, Lumen: 0, Ember: 0, Vex: 2, Bruno: 3, Frost: 4, Prism: 5, Sage: 6, Orbi: 8, Chrono: 10, Nyx: 12, Rocky: 14, Rad: 15, Gale: 17, Volt: 19, Mystic: 21, Lucky: 24 };
+const UNLOCK_LV = { Atlas: 0, Lumen: 0, Ember: 0, Vex: 2, Bruno: 3, Frost: 4, Prism: 5, Sage: 6, Orbi: 8, Chrono: 10, Nyx: 12, Rocky: 14, Rad: 15, Gale: 17, Volt: 19, Mystic: 21, Lucky: 24, Moss: 9 };
 CATALOG.forEach(c => { c.lv = UNLOCK_LV[c.name] | 0; });
 const isUnlocked = c => acctInfo().lvl >= c.lv;
 const DIFFS = [
@@ -153,13 +154,13 @@ const DIFFS = [
 const FILTERS = [["all", "All", "All"], ["attack", "⚔", "⚔ Attack"], ["tank", "🛡", "🛡 Tank"], ["heal", "💚", "💚 Heal"], ["support", "🌀", "🌀 Support"], ["buff", "✨", "✨ Buff"]];
 const ROLE_COL = { attack: "#ff8a6a", tank: "#7ab8ff", heal: "#8cf08c", support: "#6fe0d0", buff: "#f09aff" };
 let WIN_TIME = 300, PACE = 1.47;
-const METEOR_CHANCE = 0.05;
+const RARE_WEAPON_CHANCE = { meteor: 0.05, flame: 0.12, boom: 0.12, knives: 0.12 };
 const ORB_COL = ["#2fa8ff", "#ff3a4a", "#ffd23f"], ORB_NAME = ["Blue", "Red", "Yellow"], ORB_CHANCE = [0.05, 0.075, 0.10], COWBOY_BULLET = 0.5;
 const BASE_SLOTS = 2, MAX_COMP = 5, KINGS_NEEDED = 3;
 
 /* ================= state ================= */
 let state = "menu", paused = false, hero = HEROES[0];
-let time = 0, kills = 0, P, E, S, ES, G, PT, TX, FX, RN, banner, boss, shake, hitStop;
+let time = 0, kills = 0, P, E, S, ES, G, PT, TX, FX, RN, banner, boss, shake, hitStop, FS = [];
 let wl = {}, pl = {}, cd = {}, freeze = 0, selMain = 0, selComp = [], menuDrag = null, medT = 5, recruitPending = 0, CP = [];
 let level, xp, xpNeed, pending, choices = [], levelTitle = "LEVEL UP!";
 let spawnT, nextSwarm, nextBoss, bossN, overT = 0, gemCombo = 0, gemComboT = 0;
@@ -187,7 +188,7 @@ const UPS = [
   { id: "dmg", name: "Power", icon: "💪", d: "+4% damage per rank" },
   { id: "sta", name: "Endurance", icon: "🏃", d: "+15 stamina & faster regen per rank" },
   { id: "spd", name: "Swiftness", icon: "👟", d: "+2% move speed per rank" },
-  { id: "luck", name: "Luck", icon: "🍀", d: "+15% king-orb drop chance per rank" },
+  { id: "luck", name: "Luck", icon: "🍀", d: "+15% king-orb chance and boosts rare upgrade odds per rank" },
 ];
 const upRank = id => (acct.up && acct.up[id]) | 0;
 const upCost = r => r < 5 ? 1 : 2;
@@ -215,14 +216,12 @@ function startGame(h) {
   hero = h; audio(); DF = makeDF(diffIdx, stage); orbHeld = [false, false, false]; lastGain = null; PD = []; cowboysKilled = 0; run = { absorbed: 0, healed: 0 }; endNote = "";
   wl = { [h.w]: 1 }; pl = {}; cd = { bolt: 0.3, zap: 0.5, nova: 2, boom: 1, knives: 0.4, meteor: 10 }; FZ = []; MT = []; fT = 0; RAD = []; MS = null; flashT = 0; sprintTog = false;
   P = { x: 0, y: 0, hp: stat().maxhp, stam: stat().stamMax, exh: false, stR: 0, sprint: false, rdCD: 0, inv: 0, face: 1, fx: 0, fy: 1, moving: false, hurt: 0, abCD: 0, dfCD: 0, dfT: 0, storm: 0, stormT: 0, shieldT: 0 }; freeze = 0;
-  E = []; S = []; ES = []; G = []; PT = []; TX = []; FX = []; RN = [];
+  E = []; S = []; ES = []; G = []; PT = []; TX = []; FX = []; RN = []; FS = [];
   time = 0; kills = 0; level = 1; xp = 0; xpNeed = 5; pending = 0; boss = null; shake = 0; hitStop = 0;
   if (endless) { WIN_TIME = Infinity; PACE = 1.25; } else { WIN_TIME = rint(300, 600); PACE = (420 + 0.35 * (WIN_TIME - 240)) / WIN_TIME; }
-  const nk = endless ? 1 : 3; kingTimes = [];
-  for (let i = 1; i <= nk; i++) kingTimes.push(endless ? 150 : Math.round(WIN_TIME * 0.2 * i));
-  kingIdx = 0; kingsKilled = 0; cowboyDead = false; cowboySpawned = false; overtime = false; SZ = []; szT = 12 * DF.safe; swarmEvery = endless ? 45 : WIN_TIME / 7; nextCowboy = 300;
-  spawnT = 1; nextSwarm = swarmEvery * 0.6; nextBoss = kingTimes[0]; bossN = 0;
-  banner = { text: endless ? "♾ ENDLESS — SURVIVE AS LONG AS YOU CAN" : "SURVIVE " + fmt(WIN_TIME) + "  ·  3 KINGS, THEN THE COWBOY SPIDER", life: 4, color: "#fff" };
+  kingTimes = []; kingIdx = 0; kingsKilled = 0; cowboyDead = false; cowboySpawned = false; overtime = false; SZ = []; szT = 12 * DF.safe; swarmEvery = endless ? 45 : WIN_TIME / 7; nextCowboy = 300;
+  spawnT = 1; nextSwarm = swarmEvery * 0.6; nextBoss = Infinity; bossN = 0;
+  banner = { text: endless ? "♾ ENDLESS — COLLECT ORBS TO SUMMON KINGS" : "SURVIVE " + fmt(WIN_TIME) + "  ·  SUMMON 3 KINGS, THEN THE COWBOY SPIDER", life: 4, color: "#fff" };
   paused = false; state = "play"; overT = 0;
   CP = []; recruitPending = 0; medT = 5;
   for (const n of selComp) addComp(n, true);
@@ -276,10 +275,16 @@ function pickType() {
 function collectKingOrb(c) {
   orbHeld[c] = true; sfx.pickup(); burst(P.x, P.y, 16, ORB_COL[c], 150, 0.6); beep(700 + c * 250, 0.2, "triangle", 0.06, 300);
   const n = orbHeld.filter(Boolean).length;
-  if (n >= 3) { orbHeld = [false, false, false]; spawnBoss(); banner = { text: "🔮 THE THREE ORBS SUMMON A SLIME KING!", life: 3.2, color: "#ffe14a" }; }
+  if (n >= 3) banner = { text: "🔮 ALL 3 ORBS READY — PRESS K OR SUMMON KING!", life: 3.2, color: "#ffe14a" };
   else banner = { text: "🔮 " + ORB_NAME[c] + " orb collected (" + n + " / 3)", life: 1.8, color: ORB_COL[c] };
 }
+function summonKing() {
+  if (state !== "play" || paused || orbHeld.filter(Boolean).length < 3 || (boss && !boss.dead)) return;
+  orbHeld = [false, false, false];
+  spawnBoss();
+}
 function spawnBoss() {
+  if (boss && !boss.dead) return;
   bossN++;
   const [x, y] = ringPos(spawnRad() * 0.8);
   const hp = (450 + 550 * bossN) * DF.boss;
@@ -696,6 +701,17 @@ function healParty(amt) {
   burst(P.x, P.y, 20, "#fff2a0", 130, 0.9); burst(P.x, P.y - 10, 8, "#ffffff", 70, 0.9);
   [660, 880, 1100].forEach((f, i) => beep(f, 0.18, "triangle", 0.05, 0, i * 0.07));
 }
+function updateFriendlySlimes(dt) {
+  for (const s of FS) {
+    s.life -= dt; s.t += dt; s.cd -= dt;
+    const target = boss && !boss.dead ? boss : nearest(s.x, s.y, 700);
+    if (!target) { const dx = P.x - s.x, dy = P.y - s.y, d = Math.hypot(dx, dy) || 1; if (d > 90) { s.x += dx / d * 145 * dt; s.y += dy / d * 145 * dt; } continue; }
+    const dx = target.x - s.x, dy = target.y - s.y, d = Math.hypot(dx, dy) || 1;
+    if (d > target.r + 16) { s.x += dx / d * 175 * dt; s.y += dy / d * 175 * dt; }
+    else if (s.cd <= 0) { dmgEnemy(target, target.type === "boss" ? 24 : 16, dx, dy, 30); s.cd = 0.7; burst(s.x, s.y, 5, "#8cf08c", 85, 0.3); }
+  }
+  FS = FS.filter(s => s.life > 0);
+}
 function updateCompanions(dt) {
   const n = CP.length, st = stat();
   CP.forEach((c, i) => {
@@ -776,6 +792,13 @@ function updateCompanions(dt) {
       case "fire":
         if (c.cd <= 0) { const t = nearest(c.x, c.y, 500); if (t) { const an = Math.atan2(t.y - c.y, t.x - c.x); S.push({ k: "fire", x: c.x, y: c.y, vx: Math.cos(an) * 340, vy: Math.sin(an) * 340, life: 1.6, dmg: 20, r: 9 }); c.cd = 2.1; sfx.shoot(); } else c.cd = 0.3; }
         break;
+      case "slimecaller":
+        if (c.cd <= 0 && FS.length < 4) {
+          FS.push({ x: c.x, y: c.y, life: 14, max: 14, cd: 0.35, t: rnd(0, 6) });
+          c.cd = 5.5; burst(c.x, c.y, 10, "#8cf08c", 130, 0.5);
+          addText(c.x, c.y - 42, "SLIME SUMMONED!", "#8cf08c", 14); beep(520, 0.12, "triangle", 0.05, 260);
+        }
+        break;
       case "ice":
         if (c.cd <= 0) { const t = nearest(c.x, c.y, 480); if (t) { const an = Math.atan2(t.y - c.y, t.x - c.x); S.push({ k: "bolt", ice: true, glow: "rgba(120,220,255,.4)", col: "#d8f6ff", x: c.x, y: c.y, vx: Math.cos(an) * 460, vy: Math.sin(an) * 460, life: 1, dmg: 10, pierce: 0, hit: new Set(), r: 6 }); c.cd = 0.85; } else c.cd = 0.2; }
         break;
@@ -839,8 +862,9 @@ function openLevel() {
   const pool = [];
   for (const id in WDEF) {
     if ((wl[id] || 0) >= 5) continue;
-    // Meteor Storm is rare: only a 5% chance to enter the pool until you own it (change METEOR_CHANCE to tune)
-    if (id === "meteor" && !wl.meteor && Math.random() > METEOR_CHANCE) continue;
+    // Special weapons are rare; Luck raises their appearance chance without changing ordinary upgrades.
+    const rareChance = RARE_WEAPON_CHANCE[id];
+    if (rareChance && !wl[id] && Math.random() > Math.min(0.85, rareChance * (1 + 0.75 * upRank("luck")))) continue;
     pool.push({ kind: "w", id });
   }
   for (const id in PDEF) if ((pl[id] || 0) < 5) pool.push({ kind: "p", id });
@@ -899,7 +923,7 @@ function update(dt) {
 
   medT -= dt;
   if (medT <= 0) { medT = rnd(9, 14) / DF.med; if (G.filter(g => g.t === "medkit").length < 3) { const [mx2, my2] = ringPos(rnd(380, 900)); G.push({ x: mx2, y: my2, v: 0, t: "medkit" }); } }
-  updateCompanions(dt); updateSafeZones(dt); updateRad(dt); if (flashT > 0) flashT -= dt * 1.2; P.rdCD = Math.max(0, P.rdCD - dt);
+  updateCompanions(dt); updateFriendlySlimes(dt); updateSafeZones(dt); updateRad(dt); if (flashT > 0) flashT -= dt * 1.2; P.rdCD = Math.max(0, P.rdCD - dt);
   for (const d of PD) d.life -= dt; PD = PD.filter(d => d.life > 0);
   // spawning
   if (freeze <= 0) spawnT -= dt;
@@ -912,7 +936,7 @@ function update(dt) {
     nextSwarm += swarmEvery; banner = { text: "🦇 BAT SWARM! 🦇", life: 2.2, color: "#c9a8ff" }; sfx.boss();
     const nb = Math.round(28 * Math.sqrt(DF.spawn)); for (let i = 0; i < nb; i++) { const a = i / nb * TAU; spawnEnemy("bat", P.x + Math.cos(a) * 430, P.y + Math.sin(a) * 430); }
   }
-  if (time >= nextBoss) { kingIdx++; nextBoss = endless ? nextBoss + 150 : kingIdx < kingTimes.length ? kingTimes[kingIdx] : Infinity; if (endless || !cowboySpawned) spawnBoss(); }
+  // Slime Kings are summoned manually after collecting all three coloured orbs.
   if (time >= WIN_TIME && !overtime) { overtime = true; banner = { text: "⏰ OVERTIME — FINISH THE BOSSES!", life: 3.5, color: "#ff9a6a" }; sfx.boss(); }
 
   // enemies
@@ -1090,7 +1114,10 @@ function update(dt) {
     if (guard) for (const o of guard) { if (Math.hypot(s.x - o.x, s.y - o.y) < o.r + s.r + 4) { s.life = 0; burst(s.x, s.y, 5, "#6fe0ff", 90, 0.3); break; } }
     for (const c of CP) if (c.def.kind === "guard" && Math.hypot(s.x - c.x, s.y - c.y) < 28) { s.life = 0; burst(s.x, s.y, 5, "#ffa53a", 90, 0.3); }
     if (s.life <= 0) continue;
-    if (Math.hypot(P.x - s.x, P.y - s.y) < s.r + 11) { s.life = 0; damagePlayer(s.dmg); if (s.web && !(P.ffT > 0)) P.slowT = 1.6; }
+    if (s.web) {
+      for (const e of E) if (!e.dead && Math.hypot(e.x - s.x, e.y - s.y) < e.r + s.r + 8) e.slowT = Math.max(e.slowT || 0, 1.8);
+    }
+    if (Math.hypot(P.x - s.x, P.y - s.y) < s.r + 11) { s.life = 0; damagePlayer(s.dmg); if (s.web && !(P.ffT > 0)) P.slowT = 2.2; }
   }
   ES = ES.filter(s => s.life > 0);
 
@@ -1359,7 +1386,11 @@ function drawEShot(s) {
     const an = Math.atan2(s.vy, s.vx) + time * 0; ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(an); ctx.fillStyle = "rgba(255,90,90,.25)"; ctx.fillRect(-14, -3, 12, 6);
     ctx.fillStyle = "#e8f4ff"; ctx.beginPath(); ctx.moveTo(11, 0); ctx.lineTo(-5, -4); ctx.lineTo(-5, 4); ctx.closePath(); ctx.fill(); ctx.fillStyle = "#6a3a2a"; ctx.fillRect(-11, -2, 6, 4); ctx.restore(); return;
   }
-  if (s.web) { ctx.fillStyle = "rgba(220,200,255,.35)"; ctx.beginPath(); ctx.arc(s.x, s.y, s.r + 4, 0, TAU); ctx.fill(); ctx.fillStyle = "#efe6ff"; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.fill(); ctx.fillStyle = "#a58ad8"; ctx.beginPath(); ctx.arc(s.x - 2, s.y - 2, 2.5, 0, TAU); ctx.fill(); return; }
+  if (s.web) {
+    ctx.save(); ctx.translate(s.x, s.y); ctx.strokeStyle = "rgba(235,225,255,.95)"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(0, 0, s.r + 3, 0, TAU); ctx.moveTo(-s.r - 3, 0); ctx.lineTo(s.r + 3, 0); ctx.moveTo(0, -s.r - 3); ctx.lineTo(0, s.r + 3);
+    ctx.moveTo(-s.r * .72, -s.r * .72); ctx.lineTo(s.r * .72, s.r * .72); ctx.moveTo(s.r * .72, -s.r * .72); ctx.lineTo(-s.r * .72, s.r * .72); ctx.stroke(); ctx.restore(); return;
+  }
   ctx.fillStyle = "rgba(255,80,160,.3)"; ctx.beginPath(); ctx.arc(s.x, s.y, s.r + 4, 0, TAU); ctx.fill(); ctx.fillStyle = "#ff5aa5"; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.fill(); ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(s.x - 2, s.y - 2, 2.5, 0, TAU); ctx.fill();
 }
 function drawPlayerFx() {
@@ -1458,6 +1489,14 @@ function drawWorld() {
   for (const r of RN) { const a = 1 - r.r / r.max; ctx.strokeStyle = `rgba(${r.col},${a})`; ctx.lineWidth = 8 * a + 2; ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, TAU); ctx.stroke(); ctx.fillStyle = `rgba(${r.col},${a * 0.18})`; ctx.fill(); }
   const list = E.filter(e => vis(e.x, e.y, 80)).sort((a, b) => a.y - b.y);
   for (const e of list) { drawEnemy(e); if (freeze > 0 || e.slowT > 0) { ctx.fillStyle = freeze > 0 ? "rgba(150,220,255,.45)" : "rgba(150,220,255,.28)"; ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 2, 0, TAU); ctx.fill(); } }
+  for (const s of FS) {
+    if (!vis(s.x, s.y, 30)) continue;
+    const bob = Math.sin(s.t * 8) * 2;
+    ctx.fillStyle = "rgba(100,255,130,.18)"; ctx.beginPath(); ctx.arc(s.x, s.y, 22, 0, TAU); ctx.fill();
+    ctx.fillStyle = "#79e879"; ctx.beginPath(); ctx.ellipse(s.x, s.y + bob, 14, 11, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = "#d8ffd8"; ctx.beginPath(); ctx.ellipse(s.x - 5, s.y + bob - 5, 4, 2.5, -0.5, 0, TAU); ctx.fill();
+    ctx.fillStyle = "#17351c"; ctx.beginPath(); ctx.arc(s.x - 4, s.y + bob, 2, 0, TAU); ctx.arc(s.x + 4, s.y + bob, 2, 0, TAU); ctx.fill();
+  }
   if (state !== "menu") { drawCompanions(); drawPlayer(); drawPlayerFx(); }
   for (const s of S) {
     if (s.k === "bolt" && s.knife) { const an = Math.atan2(s.vy, s.vx); ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(an); ctx.fillStyle = "rgba(200,230,255,.3)"; ctx.fillRect(-16, -3, 14, 6); ctx.fillStyle = "#eaf6ff"; ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-5, -4); ctx.lineTo(-5, 4); ctx.closePath(); ctx.fill(); ctx.fillStyle = "#8a6a4a"; ctx.fillRect(-10, -2, 5, 4); ctx.restore(); }
@@ -1516,11 +1555,11 @@ function drawHUD() {
   txt("👑 Kings " + Math.min(kingsKilled, KINGS_NEEDED) + "/" + KINGS_NEEDED, W / 2 - 66, 64, 13, kcol, "center", 700);
   txt("🤠🕷 Boss " + (cowboyDead ? "✔" : "—"), W / 2 + 66, 64, 13, scol, "center", 700); }
   let hint = "";
-  if (endless) hint = "☠ King in " + fmt(nextBoss - time) + "    🤠 Cowboy after " + (KINGS_NEEDED - kingsKilled % KINGS_NEEDED) + " more king" + (KINGS_NEEDED - kingsKilled % KINGS_NEEDED > 1 ? "s" : "");
-  else if (overtime) hint = "⏰ OVERTIME: finish the bosses!";
-  else if (!cowboySpawned) hint = (nextBoss < Infinity ? "☠ King in " + fmt(nextBoss - time) + "    " : "") + "🤠 Cowboy after the 3rd king";
-  else if (!cowboyDead) hint = "🤠 Slay the Cowboy Spider!";
-  else if (kingsKilled < KINGS_NEEDED) hint = "☠ Slay the remaining Slime King!";
+  if (boss && !boss.dead) hint = "☠ Slay the Slime King!";
+  else if (orbHeld.every(Boolean)) hint = "🔮 All 3 orbs collected — summon your Slime King!";
+  else if (!cowboyDead && cowboySpawned) hint = "🤠 Slay the Cowboy Spider!";
+  else if (kingsKilled < KINGS_NEEDED) hint = "🔮 Collect 3 king orbs (" + orbHeld.filter(Boolean).length + "/3) to summon the next King";
+  else if (!cowboyDead) hint = "🤠 The Cowboy Spider is next!";
   if (hint) txt(hint, W / 2, 82, 12, "#ff9aa8", "center", 700);
   const bl = E.filter(b => !b.dead && (b.type === "boss" || b.type === "cowboy")).slice(0, 3);
   bl.forEach((b, i) => {
@@ -1532,7 +1571,12 @@ function drawHUD() {
   if (gemCombo >= 6) txt("x" + gemCombo, W - 14, 108, 16, "#6bf0b0", "right");
   for (let c = 0; c < 3; c++) { const ox = 22 + c * 26, oy = 90, got = orbHeld[c]; ctx.fillStyle = got ? ORB_COL[c] : "rgba(15,22,32,.8)"; ctx.beginPath(); ctx.arc(ox, oy, 9, 0, TAU); ctx.fill(); ctx.strokeStyle = got ? "#fff" : ORB_COL[c] + "99"; ctx.lineWidth = got ? 3 : 2; ctx.stroke(); if (got) { ctx.strokeStyle = ORB_COL[c] + "66"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(ox, oy, 13, 0, TAU); ctx.stroke(); } }
   txt("King orbs", 100, 90, 11, "#9fb4c6", "left", 700);
-  if (SZ.length) txt("🛡 Safe zone " + Math.ceil(SZ[0].life) + "s", 14, 102, 12, "#9fe6ff", "left", 700);
+  const summonReady = orbHeld.every(Boolean) && !(boss && !boss.dead);
+  const sbx = 14, sby = 116, sbw = 148, sbh = 30;
+  panel(sbx, sby, sbw, sbh, summonReady ? "rgba(95,160,90,.95)" : "rgba(15,22,32,.72)", summonReady ? "#baff9a" : "#587064");
+  txt(summonReady ? "👑 SUMMON KING [K]" : "👑 SUMMON " + orbHeld.filter(Boolean).length + "/3", sbx + sbw / 2, sby + sbh / 2, 11, summonReady ? "#fff" : "#8da69a");
+  rects.push({ x: sbx, y: sby, w: sbw, h: sbh, fn: summonKing });
+  if (SZ.length) txt("🛡 Safe zone " + Math.ceil(SZ[0].life) + "s", 14, 154, 12, "#9fe6ff", "left", 700);
   if (time < 9) { ctx.globalAlpha = clamp(9 - time, 0, 1);
     const hint1 = usingTouch ? "Drag anywhere to move  ·  tap the round buttons" : "WASD / arrows to move  ·  aim with the mouse" + (wl.knives ? " (knives)" : "");
     const hint2 = usingTouch ? (hero.ab ? "Big button: " + hero.ab.name + "  ·  🛡 deflect  ·  🏃 sprint" : "🛡 deflect  ·  🏃 sprint") : (hero.ab ? "SPACE: " + hero.ab.name : "Orbs guard you") + "   SHIFT: sprint   F: deflect";
@@ -1954,6 +1998,7 @@ addEventListener("keydown", e => {
     if (state === "play") {
       if (c === "Space" && !paused) useAbility();
       if (c === "KeyF" && !paused) deflect();
+      if (c === "KeyK" && !paused) summonKing();
       if (c === "KeyP" || c === "Escape") paused = !paused;
     } else if (state === "menu") {
       if (num >= 1 && num <= HEROES.length) selMain = num - 1;
