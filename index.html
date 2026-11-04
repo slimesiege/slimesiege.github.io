@@ -6,7 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#14202c">
-<title>Slime Siege v1.46</title>
+<title>Slime Siege v1.47</title>
 <style>
   html, body { margin: 0; height: 100%; background: #14202c; overflow: hidden; touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
   canvas { display: block; width: 100vw; height: 100dvh; cursor: crosshair; touch-action: none; }
@@ -18,7 +18,7 @@
 <script>
 (() => {
 "use strict";
-const VERSION = "v1.46"; // bump on every change: v1.45 -> v1.46 (Cowboy boss, King orbs, Knifer enemy)
+const VERSION = "v1.47"; // bump on every change: v1.45 -> v1.47 (Cowboy on the spider, 3 separate orbs, Luck upgrade)
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -118,7 +118,8 @@ const EDEF = {
   imp:        { hp: 22, sp: 70, dmg: 8, r: 10, xp: 3 },
   shaman:     { hp: 45, sp: 48, dmg: 6, r: 13, xp: 5 },
   knifer:     { hp: 28, sp: 66, dmg: 9, r: 12, xp: 3 },
-  cowboy:     { hp: 1, sp: 70, dmg: 26, r: 36, xp: 0 },
+  spiderling: { hp: 10, sp: 135, dmg: 7, r: 8, xp: 1 },
+  cowboy:     { hp: 1, sp: 85, dmg: 26, r: 62, xp: 0 },
 };
 const CATALOG = [
   { name: "Atlas", title: "the Bulwark", role: "tank", color: "#7ab8ff", hat: "#1c3a6a", kind: "tank", ab: "Aegis", d: "Takes every hit for the party. Falls, then rises again" },
@@ -153,6 +154,7 @@ const FILTERS = [["all", "All", "All"], ["attack", "⚔", "⚔ Attack"], ["tank"
 const ROLE_COL = { attack: "#ff8a6a", tank: "#7ab8ff", heal: "#8cf08c", support: "#6fe0d0", buff: "#f09aff" };
 let WIN_TIME = 300, PACE = 1.47;
 const METEOR_CHANCE = 0.05;
+const ORB_COL = ["#2fa8ff", "#ff3a4a", "#ffd23f"], ORB_NAME = ["Blue", "Red", "Yellow"], ORB_CHANCE = [0.05, 0.075, 0.10], COWBOY_BULLET = 0.5;
 const BASE_SLOTS = 2, MAX_COMP = 5, KINGS_NEEDED = 3;
 
 /* ================= state ================= */
@@ -161,7 +163,7 @@ let time = 0, kills = 0, P, E, S, ES, G, PT, TX, FX, RN, banner, boss, shake, hi
 let wl = {}, pl = {}, cd = {}, freeze = 0, selMain = 0, selComp = [], menuDrag = null, medT = 5, recruitPending = 0, CP = [];
 let level, xp, xpNeed, pending, choices = [], levelTitle = "LEVEL UP!";
 let spawnT, nextSwarm, nextBoss, bossN, overT = 0, gemCombo = 0, gemComboT = 0;
-let kingOrbs = 0, usingMouse = false, usingTouch = false, sprintTog = false, RAD = [], MS = null, flashT = 0, FZ = [], MT = [], fT = 0, PD = [], cowboysKilled = 0, stage = 1, endless = false, nextCowboy = 300, lastGain = null;
+let orbHeld = [false, false, false], usingMouse = false, usingTouch = false, sprintTog = false, RAD = [], MS = null, flashT = 0, FZ = [], MT = [], fT = 0, PD = [], cowboysKilled = 0, stage = 1, endless = false, nextCowboy = 300, lastGain = null;
 let kingsKilled = 0, cowboyDead = false, cowboySpawned = false, kingTimes = [], kingIdx = 0, overtime = false, SZ = [], szT = 0, swarmEvery = 40;
 let best = 0;
 let diffIdx = 1, DF = DIFFS[1], run = { absorbed: 0, healed: 0 }, endNote = "", bests = {};
@@ -185,6 +187,7 @@ const UPS = [
   { id: "dmg", name: "Power", icon: "💪", d: "+4% damage per rank" },
   { id: "sta", name: "Endurance", icon: "🏃", d: "+15 stamina & faster regen per rank" },
   { id: "spd", name: "Swiftness", icon: "👟", d: "+2% move speed per rank" },
+  { id: "luck", name: "Luck", icon: "🍀", d: "+15% king-orb drop chance per rank" },
 ];
 const upRank = id => (acct.up && acct.up[id]) | 0;
 const upCost = r => r < 5 ? 1 : 2;
@@ -209,7 +212,7 @@ function stat() {
 }
 
 function startGame(h) {
-  hero = h; audio(); DF = makeDF(diffIdx, stage); kingOrbs = 0; lastGain = null; PD = []; cowboysKilled = 0; run = { absorbed: 0, healed: 0 }; endNote = "";
+  hero = h; audio(); DF = makeDF(diffIdx, stage); orbHeld = [false, false, false]; lastGain = null; PD = []; cowboysKilled = 0; run = { absorbed: 0, healed: 0 }; endNote = "";
   wl = { [h.w]: 1 }; pl = {}; cd = { bolt: 0.3, zap: 0.5, nova: 2, boom: 1, knives: 0.4, meteor: 10 }; FZ = []; MT = []; fT = 0; RAD = []; MS = null; flashT = 0; sprintTog = false;
   P = { x: 0, y: 0, hp: stat().maxhp, stam: stat().stamMax, exh: false, stR: 0, sprint: false, rdCD: 0, inv: 0, face: 1, fx: 0, fy: 1, moving: false, hurt: 0, abCD: 0, dfCD: 0, dfT: 0, storm: 0, stormT: 0, shieldT: 0 }; freeze = 0;
   E = []; S = []; ES = []; G = []; PT = []; TX = []; FX = []; RN = [];
@@ -219,7 +222,7 @@ function startGame(h) {
   for (let i = 1; i <= nk; i++) kingTimes.push(endless ? 150 : Math.round(WIN_TIME * 0.2 * i));
   kingIdx = 0; kingsKilled = 0; cowboyDead = false; cowboySpawned = false; overtime = false; SZ = []; szT = 12 * DF.safe; swarmEvery = endless ? 45 : WIN_TIME / 7; nextCowboy = 300;
   spawnT = 1; nextSwarm = swarmEvery * 0.6; nextBoss = kingTimes[0]; bossN = 0;
-  banner = { text: endless ? "♾ ENDLESS — SURVIVE AS LONG AS YOU CAN" : "SURVIVE " + fmt(WIN_TIME) + "  ·  3 KINGS, THEN THE COWBOY", life: 4, color: "#fff" };
+  banner = { text: endless ? "♾ ENDLESS — SURVIVE AS LONG AS YOU CAN" : "SURVIVE " + fmt(WIN_TIME) + "  ·  3 KINGS, THEN THE COWBOY SPIDER", life: 4, color: "#fff" };
   paused = false; state = "play"; overT = 0;
   CP = []; recruitPending = 0; medT = 5;
   for (const n of selComp) addComp(n, true);
@@ -245,7 +248,7 @@ function spawnEnemy(type, x, y, extra) {
   const d = EDEF[type], hpm = 1 + time * PACE / 150;
   const e = { type, x, y, r: d.r, hp: d.hp * hpm * DF.hp, sp: d.sp * (1 + time * PACE / 900) * DF.spd, dmg: d.dmg, xp: d.xp,
     flash: 0, kx: 0, ky: 0, t: rnd(0, 6), cd: rnd(1, 2.2), orbCD: 0, boomCD: 0, dead: false };
-  if (type !== "boss" && type !== "cowboy" && DF.elite && time > 25 && Math.random() < DF.elite) { e.elite = true; e.hp *= 3; e.r *= 1.3; e.xp *= 3; e.dmg *= 1.25; }
+  if (type !== "boss" && type !== "cowboy" && type !== "spiderling" && DF.elite && time > 25 && Math.random() < DF.elite) { e.elite = true; e.hp *= 3; e.r *= 1.3; e.xp *= 3; e.dmg *= 1.25; }
   if (type === "charger") { e.st = "walk"; e.stt = rnd(1.5, 3); e.dx = 0; e.dy = 0; }
   if (type === "imp") { e.stt = rnd(1.5, 3); e.volley = 0; }
   if (type === "shaman") { e.stt = 2; }
@@ -270,10 +273,11 @@ function pickType() {
   for (const [t, wt] of w) { r -= wt; if (r <= 0) return t; }
   return "slime";
 }
-function collectKingOrb() {
-  kingOrbs++; sfx.pickup(); burst(P.x, P.y, 14, "#ffe14a", 140, 0.6);
-  if (kingOrbs >= 3) { kingOrbs = 0; spawnBoss(); banner = { text: "🔮 THE ORBS SUMMON A SLIME KING!", life: 3.2, color: "#ffe14a" }; }
-  else { banner = { text: "🔮 King orb " + kingOrbs + " / 3", life: 1.6, color: "#9fe0ff" }; }
+function collectKingOrb(c) {
+  orbHeld[c] = true; sfx.pickup(); burst(P.x, P.y, 16, ORB_COL[c], 150, 0.6); beep(700 + c * 250, 0.2, "triangle", 0.06, 300);
+  const n = orbHeld.filter(Boolean).length;
+  if (n >= 3) { orbHeld = [false, false, false]; spawnBoss(); banner = { text: "🔮 THE THREE ORBS SUMMON A SLIME KING!", life: 3.2, color: "#ffe14a" }; }
+  else banner = { text: "🔮 " + ORB_NAME[c] + " orb collected (" + n + " / 3)", life: 1.8, color: ORB_COL[c] };
 }
 function spawnBoss() {
   bossN++;
@@ -284,9 +288,9 @@ function spawnBoss() {
 }
 function spawnCowboy() {
   cowboySpawned = true;
-  const [x, y] = ringPos(spawnRad() * 0.8), hp = 3200 * DF.boss * (1 + 0.45 * cowboysKilled);
-  spawnEnemy("cowboy", x, y, { hp, maxhp: hp, st: "stalk", stt: 2.2, atk: 0, pew: 1, muz: 0, aimx: 1, aimy: 0 });
-  banner = { text: "🤠 THE COWBOY RIDES IN! 🤠", life: 4, color: "#e8b070" }; sfx.boss(); shake = 18;
+  const [x, y] = ringPos(spawnRad() * 0.8), hp = 6400 * DF.boss * (1 + 0.45 * cowboysKilled);
+  spawnEnemy("cowboy", x, y, { hp, maxhp: hp, dmg: stat().maxhp * 0.3 / DF.dmg, st: "chase", stt: 3, atk: 3, pew: 1, wv: 0, muz: 0, aimx: 1, aimy: 0, tx: x, ty: y });
+  banner = { text: "🤠🕷 THE COWBOY RIDES IN ON A GIANT SPIDER! 🕷🤠", life: 4.5, color: "#e8b070" }; sfx.boss(); shake = 18;
 }
 function addText(x, y, txt, color = "#fff", size = 14) { if (TX.length < 90) TX.push({ x, y, txt, color, size, life: 0.7, vy: -50 }); }
 function burst(x, y, n, color, sp = 140, life = 0.6) {
@@ -358,7 +362,7 @@ function checkWin() {
 }
 function killEnemy(e) {
   e.dead = true; kills++; sfx.pop();
-  const col = { slime: "#6be36b", bat: "#a77bff", brute: "#ff7a4a", spitter: "#ffd84a", bomber: "#ff4a4a", boss: "#5fa8ff", splitter: "#6fdcae", ghost: "#dfe9ff", charger: "#c8924a", imp: "#b06be0", shaman: "#5fd080", knifer: "#7a7a8a", cowboy: "#d9a25a" }[e.type];
+  const col = { slime: "#6be36b", bat: "#a77bff", brute: "#ff7a4a", spitter: "#ffd84a", bomber: "#ff4a4a", boss: "#5fa8ff", splitter: "#6fdcae", ghost: "#dfe9ff", charger: "#c8924a", imp: "#b06be0", shaman: "#5fd080", knifer: "#7a7a8a", spiderling: "#8a4a68", cowboy: "#a05aff" }[e.type];
   const bigOne = e.type === "boss" || e.type === "cowboy";
   burst(e.x, e.y, bigOne ? 70 : 9, col, bigOne ? 320 : 150, 0.7);
   if (e.type !== "ghost") { PD.push({ x: e.x, y: e.y, r: e.r * (bigOne ? 1.6 : rnd(1.1, 1.6)), life: bigOne ? 16 : 9, max: bigOne ? 16 : 9, col, ph: rnd(0, 6), sx: rnd(0.8, 1.2) }); if (PD.length > 110) PD.shift(); }
@@ -373,13 +377,19 @@ function killEnemy(e) {
   if (e.type === "cowboy") {
     for (let i = 0; i < 36; i++) G.push({ x: e.x + rnd(-70, 70), y: e.y + rnd(-70, 70), v: 3, t: "gem" });
     G.push({ x: e.x, y: e.y, v: 0, t: "chest" });
-    for (const o of E) if (!o.dead && o.type === "knifer") { o.dead = true; burst(o.x, o.y, 4, "#8a8a9a", 90, 0.4); }
+    for (const o of E) if (!o.dead && (o.type === "knifer" || o.type === "spiderling")) { o.dead = true; burst(o.x, o.y, 4, "#8a8a9a", 90, 0.4); }
     ES = []; cowboyDead = true; cowboysKilled++; shake = 26; hitStop = 0.2; sfx.boom();
-    banner = { text: "🤠 THE COWBOY IS DOWN! 🤠", life: 2.8, color: "#e8b070" };
+    banner = { text: "🤠🕷 THE COWBOY SPIDER IS DOWN! 🕷🤠", life: 3, color: "#e8b070" };
     checkWin(); return;
   }
   G.push({ x: e.x, y: e.y, v: e.xp, t: "gem" });
-  if (e.type === "slime" && !e.small && Math.random() < 0.05) { G.push({ x: e.x + rnd(-8, 8), y: e.y - 6, v: 0, t: "kingorb" }); burst(e.x, e.y, 14, "#7fd0ff", 160, 0.7); beep(1200, 0.12, "triangle", 0.05, 400); addText(e.x, e.y - 28, "✨ KING ORB!", "#9fe0ff", 15); }
+  if (e.type === "slime" && !e.small) {
+    const lk = 1 + 0.15 * upRank("luck");
+    for (let c = 0; c < 3; c++) {
+      if (orbHeld[c] || G.some(g => g.t === "kingorb" && g.c === c)) continue;
+      if (Math.random() < ORB_CHANCE[c] * lk) { G.push({ x: e.x + rnd(-8, 8), y: e.y - 6, v: 0, t: "kingorb", c }); burst(e.x, e.y, 16, ORB_COL[c], 170, 0.7); beep(1000 + c * 200, 0.14, "triangle", 0.05, 400); addText(e.x, e.y - 28, "✨ " + ORB_NAME[c].toUpperCase() + " ORB!", ORB_COL[c], 15); break; }
+    }
+  }
   if (e.elite) { for (let i = 0; i < 2; i++) G.push({ x: e.x + rnd(-14, 14), y: e.y + rnd(-14, 14), v: 2, t: "gem" }); if (Math.random() < 0.25) G.push({ x: e.x, y: e.y + 10, v: 0, t: "heart" }); burst(e.x, e.y, 14, "#ff6a6a", 200, 0.6); }
   const r = Math.random();
   if (r < 0.012 * DF.med) G.push({ x: e.x + 8, y: e.y, v: 0, t: "heart" });
@@ -921,6 +931,7 @@ function update(dt) {
       e.cd -= dt;
       if (e.cd <= 0 && d < 520) { e.cd = 2.3; ES.push({ x: e.x, y: e.y, vx: ux * 150, vy: uy * 150, life: 5, r: 7, dmg: 9 }); sfx.spit(); }
     } else if (e.type === "splitter") { vx = ux * e.sp; vy = uy * e.sp; }
+    else if (e.type === "spiderling") { const w = Math.sin(e.t * 9) * 0.35; vx = (ux - uy * w) * e.sp; vy = (uy + ux * w) * e.sp; }
     else if (e.type === "knifer") {
       const k = d > 300 ? 1 : d < 190 ? -0.7 : 0; vx = ux * e.sp * k; vy = uy * e.sp * k; e.cd -= dt;
       if (e.cd <= 0 && d < 540) {
@@ -961,19 +972,51 @@ function update(dt) {
     }
     else if (e.type === "cowboy") {
       e.stt -= dt; e.muz = Math.max(0, (e.muz || 0) - dt); const rage = e.hp < e.maxhp * 0.5;
-      if (e.st === "stalk") {
-        const k = d > 380 ? 1 : d < 250 ? -1 : 0, sx = -uy, sy = ux, dir = Math.sin(e.t * 0.5) > 0 ? 1 : -1;
-        vx = (ux * k + sx * 0.7 * dir) * e.sp; vy = (uy * k + sy * 0.7 * dir) * e.sp;
-        if (e.stt <= 0) { e.atk++; e.st = "aim"; e.stt = rage ? 0.6 : 0.85; e.pew = e.atk % 3 === 0 ? (rage ? 3 : 2) : 1; }
-      } else if (e.st === "aim") {
-        if (e.stt > 0.22) { e.aimx = ux; e.aimy = uy; }
+      if (e.st === "chase") {
+        const k = d > 300 ? 1 : d < 200 ? -0.5 : 0, sx = -uy, sy = ux, dir = Math.sin(e.t * 0.5) > 0 ? 1 : -1;
+        vx = (ux * k + sx * 0.5 * dir) * e.sp; vy = (uy * k + sy * 0.5 * dir) * e.sp;
         if (e.stt <= 0) {
-          const n = e.pew, base = Math.atan2(e.aimy, e.aimx), bd = stat().maxhp * 0.25 / DF.dmg;
-          for (let i = 0; i < n; i++) { const a = base + (i - (n - 1) / 2) * 0.24; ES.push({ x: e.x + Math.cos(a) * 30, y: e.y - 8 + Math.sin(a) * 30, vx: Math.cos(a) * 540, vy: Math.sin(a) * 540, life: 2.4, r: 8, dmg: bd, bullet: true }); }
-          e.muz = 0.14; addText(e.x, e.y - 82, "PEW!" + (n > 1 ? " PEW!" : ""), "#ffe14a", 22);
+          e.atk = (e.atk + 1) % 4;
+          if (e.atk === 0) { e.st = "aim"; e.stt = rage ? 0.6 : 0.85; e.pew = rage ? 3 : (Math.random() < 0.4 ? 2 : 1); }
+          else if (e.atk === 1) { e.st = "web"; e.stt = 1.1; e.wv = 0; }
+          else if (e.atk === 2) { e.st = "ptele"; e.stt = 0.95; e.tx = P.x; e.ty = P.y; }
+          else { e.st = "brood"; e.stt = 0.8; }
+        }
+      } else if (e.st === "aim") {
+        if (e.stt > 0.22) { const gx2 = P.x - e.x, gy2 = P.y - (e.y - 44), gl = Math.hypot(gx2, gy2) || 1; e.aimx = gx2 / gl; e.aimy = gy2 / gl; }
+        if (e.stt <= 0) {
+          const n = e.pew, base = Math.atan2(e.aimy, e.aimx), bd = stat().maxhp * COWBOY_BULLET / DF.dmg;
+          for (let i = 0; i < n; i++) { const a = base + (i - (n - 1) / 2) * 0.24; ES.push({ x: e.x + Math.cos(a) * 34, y: e.y - 44 + Math.sin(a) * 34, vx: Math.cos(a) * 540, vy: Math.sin(a) * 540, life: 2.4, r: 8, dmg: bd, bullet: true }); }
+          e.muz = 0.14; addText(e.x, e.y - 120, "PEW!" + (n > 1 ? " PEW!" : ""), "#ffe14a", 24);
           beep(1500, 0.07, "square", 0.06, -1000); noise(0.08, 0.05, 2500); shake = Math.max(shake, 3);
-          e.st = "stalk"; e.stt = rage ? 1.2 : 1.9;
-          if (rage && e.atk % 4 === 0) for (let i = 0; i < 2; i++) spawnEnemy("knifer", e.x + rnd(-60, 60), e.y + rnd(-60, 60));
+          e.st = "chase"; e.stt = rage ? 1.4 : 2.2;
+        }
+      } else if (e.st === "web") {
+        e.wv -= dt;
+        if (e.wv <= 0 && e.stt > 0.05) {
+          e.wv = 0.32; const base = Math.atan2(uy, ux), n = 5 + (rage ? 2 : 0);
+          for (let i = 0; i < n; i++) { const a = base + (i - (n - 1) / 2) * 0.22; ES.push({ x: e.x, y: e.y, vx: Math.cos(a) * 230, vy: Math.sin(a) * 230, life: 4, r: 8, dmg: 20, web: true }); }
+          sfx.spit();
+        }
+        if (e.stt <= 0) { e.st = "chase"; e.stt = rage ? 2 : 3; }
+      } else if (e.st === "ptele") {
+        if (e.stt > 0.35) { e.tx = P.x; e.ty = P.y; }
+        if (e.stt <= 0) { e.st = "pounce"; e.stt = 0.5; }
+      } else if (e.st === "pounce") {
+        const rem = Math.max(e.stt, 0.05); vx = (e.tx - e.x) / rem; vy = (e.ty - e.y) / rem;
+        if (e.stt <= 0) {
+          RN.push({ x: e.x, y: e.y, r: 0, max: 120, sp: 500, dmg: 0, hit: new Set(), col: "230,170,90", visual: true });
+          if (Math.hypot(P.x - e.x, P.y - e.y) < 120) damagePlayer(stat().maxhp * 0.4 / DF.dmg);
+          shake = Math.max(shake, 14); burst(e.x, e.y, 24, "#c8a064", 220, 0.7); sfx.boom();
+          for (let i = 0; i < 3; i++) spawnEnemy("spiderling", e.x + rnd(-50, 50), e.y + rnd(-50, 50));
+          e.st = "chase"; e.stt = 2.2;
+        }
+      } else if (e.st === "brood") {
+        if (e.stt <= 0) {
+          const n = 5 + (rage ? 3 : 0);
+          for (let i = 0; i < n; i++) spawnEnemy("spiderling", e.x + rnd(-60, 60), e.y + rnd(-60, 60));
+          if (rage) for (let i = 0; i < 2; i++) spawnEnemy("knifer", e.x + rnd(-70, 70), e.y + rnd(-70, 70));
+          sfx.boss(); e.st = "chase"; e.stt = 3;
         }
       }
     }
@@ -1075,7 +1118,7 @@ function update(dt) {
     if (d < 20) {
       g.taken = true;
       if (g.t === "gem") { xp += g.v * 1.4 * DF.xp * (hasComp("Lucky") ? 1.25 : 1); gemCombo++; gemComboT = 0.4; sfx.gem(gemCombo); }
-      else if (g.t === "kingorb") collectKingOrb();
+      else if (g.t === "kingorb") collectKingOrb(g.c);
       else if (g.t === "heart") { P.hp = Math.min(st.maxhp, P.hp + 30); addText(P.x, P.y - 30, "+30 HP", "#ff8aa0", 16); sfx.pickup(); }
       else if (g.t === "magnet") { for (const o of G) o.pull = true; banner = { text: "MAGNET!", life: 1.2, color: "#7fd0ff" }; sfx.pickup(); }
       else if (g.t === "chest") { pending++; levelTitle = "TREASURE!"; if (canRecruit()) recruitPending++; sfx.pickup(); }
@@ -1225,32 +1268,51 @@ function drawEnemy(e) {
         ctx.strokeStyle = "#e8f4ff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x + hx * 17, y + hy * 17); ctx.lineTo(x + hx * 29, y + hy * 29); ctx.stroke();
       }
       break; }
+    case "spiderling": {
+      ctx.strokeStyle = fl ? "#fff" : "#2a1838"; ctx.lineWidth = 2; ctx.lineCap = "round";
+      for (let i = 0; i < 6; i++) { const s2 = i < 3 ? -1 : 1, k = i % 3, w = Math.sin(e.t * 22 + i * 2) * 3; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + s2 * 9, y + (k - 1) * 6 - 4 + w); ctx.lineTo(x + s2 * 13, y + (k - 1) * 8 + 3); ctx.stroke(); }
+      ctx.fillStyle = fl ? "#fff" : "#5a2a48"; ctx.beginPath(); ctx.ellipse(x, y + 1, r * 0.95, r * 0.8, 0, 0, TAU); ctx.fill();
+      if (!fl) { ctx.fillStyle = "#ff4a4a"; ctx.fillRect(x - 3.5, y - 3, 2, 2); ctx.fillRect(x + 1.5, y - 3, 2, 2); }
+      break; }
     case "cowboy": {
-      const ang = Math.atan2(P.y - y, P.x - x), rage = e.hp < e.maxhp * 0.5, face = Math.cos(ang) >= 0 ? 1 : -1, walk = Math.sin(e.t * 8) * 5;
-      if (e.st === "aim") { const aa = Math.atan2(e.aimy || 0, e.aimx || 1); ctx.strokeStyle = "rgba(255,60,40," + (0.35 + 0.35 * Math.sin(e.t * 34)) + ")"; ctx.lineWidth = 3; ctx.setLineDash([10, 8]); ctx.beginPath(); ctx.moveTo(x, y - 8); ctx.lineTo(x + Math.cos(aa) * 760, y - 8 + Math.sin(aa) * 760); ctx.stroke(); ctx.setLineDash([]); }
-      ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.beginPath(); ctx.ellipse(x, y + 40, 28, 8, 0, 0, TAU); ctx.fill();
-      ctx.lineCap = "round"; ctx.strokeStyle = fl ? "#fff" : "#2a3a5a"; ctx.lineWidth = 11;
-      ctx.beginPath(); ctx.moveTo(x - 7, y + 14); ctx.lineTo(x - 8 - walk * 0.5, y + 38); ctx.moveTo(x + 7, y + 14); ctx.lineTo(x + 8 + walk * 0.5, y + 38); ctx.stroke();
-      ctx.fillStyle = fl ? "#fff" : "#3a2414"; ctx.fillRect(x - 15 - walk * 0.5, y + 36, 14, 7); ctx.fillRect(x + 1 + walk * 0.5, y + 36, 14, 7);
-      ctx.fillStyle = fl ? "#fff" : (rage ? "#a8341e" : "#8a5a30"); ctx.beginPath(); ctx.ellipse(x, y - 6, 20, 24, 0, 0, TAU); ctx.fill();
-      if (!fl) {
-        ctx.fillStyle = "#5a3818"; ctx.fillRect(x - 20, y + 6, 40, 5); ctx.fillStyle = "#ffd23f"; ctx.fillRect(x - 4, y + 5, 8, 7);
-        ctx.fillStyle = "#ffe14a"; ctx.beginPath(); for (let i = 0; i < 10; i++) { const rr = i % 2 ? 3.5 : 8, aa = i / 10 * TAU - Math.PI / 2; ctx.lineTo(x - 8 + Math.cos(aa) * rr, y - 8 + Math.sin(aa) * rr); } ctx.closePath(); ctx.fill();
+      const rage = e.hp < e.maxhp * 0.5;
+      if (e.st === "ptele") { const pu = 1 + Math.sin(e.t * 18) * 0.06; ctx.fillStyle = "rgba(255,70,70,.18)"; ctx.strokeStyle = "rgba(255,90,90,.75)"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(e.tx, e.ty, 120 * pu, 0, TAU); ctx.fill(); ctx.stroke(); }
+      const lift = e.st === "pounce" ? -30 * Math.sin(Math.PI * clamp(1 - e.stt / 0.5, 0, 1)) : 0, yy = y + lift;
+      if (e.st === "aim") { const aa = Math.atan2(e.aimy || 0, e.aimx || 1); ctx.strokeStyle = "rgba(255,60,40," + (0.35 + 0.35 * Math.sin(e.t * 34)) + ")"; ctx.lineWidth = 3; ctx.setLineDash([10, 8]); ctx.beginPath(); ctx.moveTo(x, yy - 44); ctx.lineTo(x + Math.cos(aa) * 760, yy - 44 + Math.sin(aa) * 760); ctx.stroke(); ctx.setLineDash([]); }
+      // spider mount
+      ctx.strokeStyle = fl ? "#fff" : "#241532"; ctx.lineWidth = 8; ctx.lineCap = "round"; ctx.lineJoin = "round";
+      for (let i = 0; i < 8; i++) {
+        const sd = i < 4 ? -1 : 1, k = i % 4, ph = Math.sin(e.t * 9 + i * 1.7), by2 = (k - 1.5) * 16;
+        ctx.beginPath(); ctx.moveTo(x + sd * 14, yy + by2 * 0.6 + 6); ctx.lineTo(x + sd * (50 + ph * 6), yy + by2 * 1.6 - 22); ctx.lineTo(x + sd * (86 + ph * 10), yy + by2 * 1.9 + 28 + ph * 5); ctx.stroke();
       }
-      const gx = x + Math.cos(ang) * 34, gy = y - 10 + Math.sin(ang) * 34;
-      ctx.strokeStyle = fl ? "#fff" : "#8a5a30"; ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(x, y - 14); ctx.lineTo(gx, gy); ctx.stroke();
-      ctx.strokeStyle = fl ? "#fff" : "#8a5a30"; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(x - face * 14, y - 12); ctx.lineTo(x - face * 20, y + 8); ctx.stroke();
-      ctx.save(); ctx.translate(gx, gy); ctx.rotate(ang); ctx.fillStyle = fl ? "#fff" : "#2a2a30"; ctx.fillRect(-4, -4, 30, 8); ctx.fillRect(-6, 2, 8, 12);
-      ctx.fillStyle = fl ? "#fff" : "#9aa0aa"; ctx.fillRect(10, -6, 10, 4); if (e.muz > 0) { ctx.fillStyle = "#fff6a0"; ctx.beginPath(); ctx.moveTo(28, 0); ctx.lineTo(48, -9); ctx.lineTo(42, 0); ctx.lineTo(48, 9); ctx.closePath(); ctx.fill(); ctx.fillStyle = "#ff9a2a"; ctx.beginPath(); ctx.arc(30, 0, 7, 0, TAU); ctx.fill(); } ctx.restore();
-      ctx.fillStyle = fl ? "#fff" : "#e8b890"; ctx.beginPath(); ctx.arc(x, y - 34, 14, 0, TAU); ctx.fill();
+      ctx.fillStyle = fl ? "#fff" : (rage ? "#7a2aa8" : "#4a2e66");
+      ctx.beginPath(); ctx.ellipse(x, yy + 30, 38, 40, 0, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x, yy - 4, 29, 24, 0, 0, TAU); ctx.fill();
       if (!fl) {
-        ctx.fillStyle = "#c83a3a"; ctx.beginPath(); ctx.moveTo(x - 13, y - 30); ctx.lineTo(x + 13, y - 30); ctx.lineTo(x, y - 20); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = rage ? "#ff3a3a" : "#222"; ctx.fillRect(x - 7, y - 38, 4, 4); ctx.fillRect(x + 3, y - 38, 4, 4);
-        ctx.fillStyle = "#5a3a1a"; ctx.fillRect(x - 9, y - 31, 18, 3);
+        ctx.fillStyle = "#d8344a"; ctx.beginPath(); ctx.moveTo(x - 8, yy + 20); ctx.lineTo(x + 8, yy + 20); ctx.lineTo(x, yy + 34); ctx.lineTo(x + 8, yy + 48); ctx.lineTo(x - 8, yy + 48); ctx.lineTo(x, yy + 34); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = rage ? "#ff4a4a" : "#ffe14a"; for (const [ox, oy2, rr] of [[-16, 6, 3.4], [16, 6, 3.4], [-9, 10, 2.8], [9, 10, 2.8]]) { ctx.beginPath(); ctx.arc(x + ox, yy + oy2, rr, 0, TAU); ctx.fill(); }
+        ctx.fillStyle = "#6a3a1a"; ctx.beginPath(); ctx.ellipse(x, yy - 14, 17, 7, 0, 0, TAU); ctx.fill(); ctx.fillStyle = "#c83a3a"; ctx.fillRect(x - 15, yy - 16, 30, 4);
       }
-      ctx.fillStyle = fl ? "#fff" : "#c8a064"; ctx.beginPath(); ctx.ellipse(x, y - 45, 31, 8, 0, 0, TAU); ctx.fill();
-      ctx.fillStyle = fl ? "#fff" : "#b88a4a"; ctx.beginPath(); ctx.moveTo(x - 15, y - 46); ctx.quadraticCurveTo(x - 15, y - 68, x, y - 66); ctx.quadraticCurveTo(x + 15, y - 68, x + 15, y - 46); ctx.closePath(); ctx.fill();
-      if (!fl) { ctx.fillStyle = "#5a2a14"; ctx.fillRect(x - 15, y - 52, 30, 6); ctx.fillStyle = "#ffe14a"; ctx.fillRect(x - 3, y - 52, 6, 6); }
+      // cowboy rider
+      const cy = yy - 14, ang = Math.atan2(P.y - (cy - 30), P.x - x), face = Math.cos(ang) >= 0 ? 1 : -1;
+      ctx.fillStyle = fl ? "#fff" : (rage ? "#a8341e" : "#8a5a30"); ctx.beginPath(); ctx.ellipse(x, cy - 14, 15, 19, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = fl ? "#fff" : "#2a3a5a"; ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(x - 8, cy - 2); ctx.lineTo(x - 22, cy + 6); ctx.moveTo(x + 8, cy - 2); ctx.lineTo(x + 22, cy + 6); ctx.stroke();
+      if (!fl) {
+        ctx.fillStyle = "#ffe14a"; ctx.beginPath(); for (let i = 0; i < 10; i++) { const rr = i % 2 ? 2.8 : 6.5, aa = i / 10 * TAU - Math.PI / 2; ctx.lineTo(x - 6 + Math.cos(aa) * rr, cy - 16 + Math.sin(aa) * rr); } ctx.closePath(); ctx.fill();
+      }
+      const gx = x + Math.cos(ang) * 26, gy = cy - 24 + Math.sin(ang) * 26;
+      ctx.strokeStyle = fl ? "#fff" : "#8a5a30"; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(x, cy - 26); ctx.lineTo(gx, gy); ctx.stroke();
+      ctx.save(); ctx.translate(gx, gy); ctx.rotate(ang); ctx.fillStyle = fl ? "#fff" : "#2a2a30"; ctx.fillRect(-3, -3.5, 26, 7); ctx.fillRect(-5, 2, 7, 10);
+      ctx.fillStyle = fl ? "#fff" : "#9aa0aa"; ctx.fillRect(8, -5.5, 9, 3.5);
+      if (e.muz > 0) { ctx.fillStyle = "#fff6a0"; ctx.beginPath(); ctx.moveTo(24, 0); ctx.lineTo(46, -9); ctx.lineTo(40, 0); ctx.lineTo(46, 9); ctx.closePath(); ctx.fill(); ctx.fillStyle = "#ff9a2a"; ctx.beginPath(); ctx.arc(26, 0, 7, 0, TAU); ctx.fill(); } ctx.restore();
+      ctx.fillStyle = fl ? "#fff" : "#e8b890"; ctx.beginPath(); ctx.arc(x, cy - 42, 12.5, 0, TAU); ctx.fill();
+      if (!fl) {
+        ctx.fillStyle = "#c83a3a"; ctx.beginPath(); ctx.moveTo(x - 11, cy - 38); ctx.lineTo(x + 11, cy - 38); ctx.lineTo(x, cy - 29); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = rage ? "#ff3a3a" : "#222"; ctx.fillRect(x - 6, cy - 45, 3.5, 3.5); ctx.fillRect(x + 2.5, cy - 45, 3.5, 3.5);
+      }
+      ctx.fillStyle = fl ? "#fff" : "#c8a064"; ctx.beginPath(); ctx.ellipse(x, cy - 52, 29, 7.5, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = fl ? "#fff" : "#b88a4a"; ctx.beginPath(); ctx.moveTo(x - 14, cy - 53); ctx.quadraticCurveTo(x - 14, cy - 74, x, cy - 72); ctx.quadraticCurveTo(x + 14, cy - 74, x + 14, cy - 53); ctx.closePath(); ctx.fill();
+      if (!fl) { ctx.fillStyle = "#5a2a14"; ctx.fillRect(x - 14, cy - 59, 28, 5.5); ctx.fillStyle = "#ffe14a"; ctx.fillRect(x - 3, cy - 59, 6, 5.5); }
       break; }
     case "boss": {
       let ox = 0, oy = 0;
@@ -1268,7 +1330,7 @@ function drawEnemy(e) {
       break; }
   }
   ctx.restore();
-  if (e.type !== "boss" && e.type !== "cowboy" && e.hp < e.maxhp && e.type !== "bat") {
+  if (e.type !== "boss" && e.type !== "cowboy" && e.hp < e.maxhp && e.type !== "bat" && e.type !== "spiderling") {
     ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(x - r, y - r - 9, r * 2, 4);
     ctx.fillStyle = "#ff5a6e"; ctx.fillRect(x - r, y - r - 9, r * 2 * Math.max(0, e.hp / e.maxhp), 4);
   }
@@ -1297,6 +1359,7 @@ function drawEShot(s) {
     const an = Math.atan2(s.vy, s.vx) + time * 0; ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(an); ctx.fillStyle = "rgba(255,90,90,.25)"; ctx.fillRect(-14, -3, 12, 6);
     ctx.fillStyle = "#e8f4ff"; ctx.beginPath(); ctx.moveTo(11, 0); ctx.lineTo(-5, -4); ctx.lineTo(-5, 4); ctx.closePath(); ctx.fill(); ctx.fillStyle = "#6a3a2a"; ctx.fillRect(-11, -2, 6, 4); ctx.restore(); return;
   }
+  if (s.web) { ctx.fillStyle = "rgba(220,200,255,.35)"; ctx.beginPath(); ctx.arc(s.x, s.y, s.r + 4, 0, TAU); ctx.fill(); ctx.fillStyle = "#efe6ff"; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.fill(); ctx.fillStyle = "#a58ad8"; ctx.beginPath(); ctx.arc(s.x - 2, s.y - 2, 2.5, 0, TAU); ctx.fill(); return; }
   ctx.fillStyle = "rgba(255,80,160,.3)"; ctx.beginPath(); ctx.arc(s.x, s.y, s.r + 4, 0, TAU); ctx.fill(); ctx.fillStyle = "#ff5aa5"; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.fill(); ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(s.x - 2, s.y - 2, 2.5, 0, TAU); ctx.fill();
 }
 function drawPlayerFx() {
@@ -1377,13 +1440,15 @@ function drawWorld() {
     if (!vis(g.x, g.y)) continue;
     const bob = Math.sin(time * 5 + g.x) * 2;
     if (g.t === "kingorb") {
-      const pu = 1 + Math.sin(time * 6 + g.x) * 0.1, R = 11 * pu, rot = time * 2.5, by2 = Math.sin(time * 3 + g.y) * 2;
-      const gl = ctx.createRadialGradient(g.x, g.y + by2, 2, g.x, g.y + by2, R * 3.2); gl.addColorStop(0, "rgba(255,230,120,.55)"); gl.addColorStop(0.5, "rgba(255,80,90,.22)"); gl.addColorStop(1, "rgba(60,160,255,0)");
-      ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(g.x, g.y + by2, R * 3.2, 0, TAU); ctx.fill();
-      [["#2fa8ff", 0], ["#ff3a4a", 1], ["#ffd23f", 2]].forEach(([c, i]) => { ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(g.x, g.y + by2); ctx.arc(g.x, g.y + by2, R, rot + i * TAU / 3, rot + (i + 1) * TAU / 3); ctx.closePath(); ctx.fill(); });
-      ctx.strokeStyle = "rgba(255,255,255,.9)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(g.x, g.y + by2, R, 0, TAU); ctx.stroke();
-      ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.beginPath(); ctx.arc(g.x - R * 0.3, g.y + by2 - R * 0.3, R * 0.28, 0, TAU); ctx.fill();
-      if (Math.random() < 0.15 && PT.length < 600) PT.push({ x: g.x + rnd(-10, 10), y: g.y + rnd(-10, 10), vx: rnd(-12, 12), vy: rnd(-30, -10), life: 0.6, max: 0.6, color: ["#2fa8ff", "#ff3a4a", "#ffd23f"][rint(0, 2)], sz: 3 });
+      const col = ORB_COL[g.c], pu = 1 + Math.sin(time * 6 + g.x) * 0.12, R = 11 * pu, by2 = Math.sin(time * 3 + g.y) * 3;
+      const gl = ctx.createRadialGradient(g.x, g.y + by2, 2, g.x, g.y + by2, R * 4); gl.addColorStop(0, col + "cc"); gl.addColorStop(0.45, col + "44"); gl.addColorStop(1, col + "00");
+      ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(g.x, g.y + by2, R * 4, 0, TAU); ctx.fill();
+      ctx.save(); ctx.translate(g.x, g.y + by2); ctx.rotate(time * 1.5); ctx.fillStyle = col + "99";
+      for (let k = 0; k < 4; k++) { ctx.rotate(Math.PI / 2); ctx.beginPath(); ctx.moveTo(-3, R); ctx.lineTo(0, R * 2.3); ctx.lineTo(3, R); ctx.closePath(); ctx.fill(); } ctx.restore();
+      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(g.x, g.y + by2, R, 0, TAU); ctx.fill();
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.5; ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.beginPath(); ctx.arc(g.x - R * 0.3, g.y + by2 - R * 0.3, R * 0.32, 0, TAU); ctx.fill();
+      if (Math.random() < 0.2 && PT.length < 600) PT.push({ x: g.x + rnd(-10, 10), y: g.y + rnd(-10, 10), vx: rnd(-12, 12), vy: rnd(-34, -10), life: 0.6, max: 0.6, color: col, sz: 3 });
       continue;
     }
     if (g.t === "gem") { ctx.fillStyle = g.v >= 3 ? "#ffd23f" : g.v >= 2 ? "#5fb8ff" : "#6bf0b0"; ctx.beginPath(); ctx.moveTo(g.x, g.y - 7 + bob); ctx.lineTo(g.x + 5, g.y + bob); ctx.lineTo(g.x, g.y + 7 + bob); ctx.lineTo(g.x - 5, g.y + bob); ctx.closePath(); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,.6)"; ctx.fillRect(g.x - 1, g.y - 4 + bob, 2, 4); }
@@ -1449,23 +1514,24 @@ function drawHUD() {
   if (endless) { txt("♾ Kings " + kingsKilled + "   🤠 Cowboys " + cowboysKilled, W / 2, 64, 13, "#ffe14a", "center", 700); }
   else {
   txt("👑 Kings " + Math.min(kingsKilled, KINGS_NEEDED) + "/" + KINGS_NEEDED, W / 2 - 66, 64, 13, kcol, "center", 700);
-  txt("🤠 Cowboy " + (cowboyDead ? "✔" : "—"), W / 2 + 66, 64, 13, scol, "center", 700); }
+  txt("🤠🕷 Boss " + (cowboyDead ? "✔" : "—"), W / 2 + 66, 64, 13, scol, "center", 700); }
   let hint = "";
   if (endless) hint = "☠ King in " + fmt(nextBoss - time) + "    🤠 Cowboy after " + (KINGS_NEEDED - kingsKilled % KINGS_NEEDED) + " more king" + (KINGS_NEEDED - kingsKilled % KINGS_NEEDED > 1 ? "s" : "");
   else if (overtime) hint = "⏰ OVERTIME: finish the bosses!";
   else if (!cowboySpawned) hint = (nextBoss < Infinity ? "☠ King in " + fmt(nextBoss - time) + "    " : "") + "🤠 Cowboy after the 3rd king";
-  else if (!cowboyDead) hint = "🤠 Slay the Cowboy!";
+  else if (!cowboyDead) hint = "🤠 Slay the Cowboy Spider!";
   else if (kingsKilled < KINGS_NEEDED) hint = "☠ Slay the remaining Slime King!";
   if (hint) txt(hint, W / 2, 82, 12, "#ff9aa8", "center", 700);
   const bl = E.filter(b => !b.dead && (b.type === "boss" || b.type === "cowboy")).slice(0, 3);
   bl.forEach((b, i) => {
     const bw = Math.min(520, W * 0.7), bx = W / 2 - bw / 2, by = 98 + i * 24;
     ctx.fillStyle = "rgba(0,0,0,.6)"; ctx.fillRect(bx, by, bw, 16); ctx.fillStyle = b.type === "cowboy" ? "#e0a040" : "#ff4a63"; ctx.fillRect(bx, by, bw * clamp(b.hp / b.maxhp, 0, 1), 16);
-    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.strokeRect(bx, by, bw, 16); txt(b.type === "cowboy" ? "THE COWBOY" : "SLIME KING", W / 2, by + 8, 11, "#fff");
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.strokeRect(bx, by, bw, 16); txt(b.type === "cowboy" ? "COWBOY SPIDER" : "SLIME KING", W / 2, by + 8, 11, "#fff");
   });
   if (banner) { ctx.globalAlpha = clamp(banner.life, 0, 1); txt(banner.text, W / 2, H * 0.26, Math.max(12, Math.min(36, W / 16, (W - 24) / (banner.text.length * 0.56))), banner.color); ctx.globalAlpha = 1; }
   if (gemCombo >= 6) txt("x" + gemCombo, W - 14, 108, 16, "#6bf0b0", "right");
-  txt("🔮 King orbs " + kingOrbs + " / 3", 14, 88, 12, kingOrbs ? "#ffe14a" : "#9fb4c6", "left", 700);
+  for (let c = 0; c < 3; c++) { const ox = 22 + c * 26, oy = 90, got = orbHeld[c]; ctx.fillStyle = got ? ORB_COL[c] : "rgba(15,22,32,.8)"; ctx.beginPath(); ctx.arc(ox, oy, 9, 0, TAU); ctx.fill(); ctx.strokeStyle = got ? "#fff" : ORB_COL[c] + "99"; ctx.lineWidth = got ? 3 : 2; ctx.stroke(); if (got) { ctx.strokeStyle = ORB_COL[c] + "66"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(ox, oy, 13, 0, TAU); ctx.stroke(); } }
+  txt("King orbs", 100, 90, 11, "#9fb4c6", "left", 700);
   if (SZ.length) txt("🛡 Safe zone " + Math.ceil(SZ[0].life) + "s", 14, 102, 12, "#9fe6ff", "left", 700);
   if (time < 9) { ctx.globalAlpha = clamp(9 - time, 0, 1);
     const hint1 = usingTouch ? "Drag anywhere to move  ·  tap the round buttons" : "WASD / arrows to move  ·  aim with the mouse" + (wl.knives ? " (knives)" : "");
@@ -1716,7 +1782,7 @@ function drawMenu() {
   const ts = clamp(W / 9, 34, 64);
   txt("SLIME SIEGE", W / 2, y + ts / 2 + Math.sin(menuT * 2) * 3, ts, "#6bf0b0"); y += ts + 6;
   txt(endless ? "Endless: no win, no time limit. See how long you can last." : "Pick a wizard and difficulty. Each run lasts a random 5–10 minutes.", W / 2, y + 6, clamp(W / 34, 11, 16), "#d8e6f2", "center", 600);
-  txt(endless ? "A King every 2:30; every 3rd King summons the Cowboy." : "To win: slay 3 Slime Kings — the 3rd summons the Cowboy — then slay it.", W / 2, y + 26, clamp(W / 38, 11, 14), "#ffb0b8", "center", 700); y += 46;
+  txt(endless ? "A King every 2:30; every 3rd King summons the Cowboy Spider." : "To win: slay 3 Slime Kings — the 3rd summons the Cowboy Spider — then slay it.", W / 2, y + 26, clamp(W / 38, 11, 14), "#ffb0b8", "center", 700); y += 46;
   { const ai = acctInfo(), ph2 = 62; panel(x0, y, colW, ph2, "rgba(15,22,32,.9)", "#c9a8ff");
     txt("⭐ Wizard Level " + ai.lvl, x0 + 16, y + 17, 16, "#fff", "left");
     txt(ai.cur + " / " + ai.need + " XP", x0 + colW - 16, y + 17, 12, "#c9a8ff", "right", 700);
@@ -1737,7 +1803,7 @@ function drawMenu() {
     y += 4;
   }
   txt("MODE", x0, y + 6, 13, "#ffd23f", "left"); y += 22;
-  [["🏁 Standard", "5–10 min · slay 3 Kings + Cowboy", false], ["♾ Endless", "No limit · survive forever", true]].forEach(([nm, ds, en], i) => {
+  [["🏁 Standard", "5–10 min · slay 3 Kings + Cowboy Spider", false], ["♾ Endless", "No limit · survive forever", true]].forEach(([nm, ds, en], i) => {
     const mw = (colW - gap) / 2, x = x0 + i * (mw + gap), sel = endless === en, hov = inside(x, y, mw, 50);
     panel(x, y, mw, 50, sel ? "rgba(107,240,176,.18)" : hov ? "rgba(34,50,70,.95)" : "rgba(15,22,32,.9)", sel ? "#6bf0b0" : hov ? "#fff" : "#3b5268");
     txt(nm, x + mw / 2, y + 18, Math.min(17, mw / 9), sel ? "#fff" : "#9fe6c0"); txt(ds, x + mw / 2, y + 38, Math.min(11, mw / 17), "#9fb4c6", "center", 600);
@@ -1790,19 +1856,20 @@ function drawMenu() {
 function drawUpgradeScreen() {
   uiLock = false;
   ctx.fillStyle = "rgba(8,14,22,.9)"; ctx.fillRect(0, 0, W, H);
-  const pw = Math.min(560, W - 24), x = W / 2 - pw / 2; let y = Math.max(10, H / 2 - 262);
-  txt("⬆ UPGRADE STATS", W / 2, y + 22, Math.min(32, W / 12), "#ffd23f");
+  const small = H < 470, cols = W >= 760 ? 2 : 1, pw = Math.min(cols === 2 ? 940 : 560, W - 24), x = W / 2 - pw / 2, rh = small ? 54 : 70, colw = cols === 2 ? (pw - 12) / 2 : pw; let y = small ? 6 : Math.max(8, H / 2 - 300);
+  txt("⬆ UPGRADE STATS", W / 2, y + 20, small ? 22 : Math.min(32, W / 12), "#ffd23f");
   const pts = upPoints(), ai = acctInfo();
-  txt("Wizard Level " + ai.lvl + "  ·  " + pts + " point" + (pts === 1 ? "" : "s") + " to spend  (1 per level)", W / 2, y + 56, 14, pts > 0 ? "#fff" : "#9fb4c6", "center", 700); y += 78;
-  for (const u of UPS) {
-    const r = upRank(u.id), max = r >= 10, c = upCost(r), can = !max && pts >= c, rh = 74;
-    panel(x, y, pw, rh, "rgba(15,22,32,.92)", can ? "#ffd23f" : "#3b5268");
-    ctx.font = "30px " + FONT; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#fff"; ctx.fillText(u.icon, x + 34, y + 30);
-    txt(u.name + "  ·  Rank " + r + " / 10", x + 66, y + 22, 16, "#fff", "left"); txt(u.d, x + 66, y + 44, 11, "#9fb4c6", "left", 600);
-    for (let i = 0; i < 10; i++) { ctx.fillStyle = i < r ? "#ffd23f" : "rgba(255,255,255,.14)"; ctx.fillRect(x + 66 + i * 15, y + 56, 12, 7); }
-    const bw = 92; button(x + pw - bw - 10, y + 17, bw, 40, max ? "MAX" : can ? "+1  (" + c + " pt)" : "(" + c + " pt)", () => buyUp(u.id), max ? "#6bf0b0" : can ? "#ffd23f" : "#6a7886", 14);
-    y += rh + 8;
-  }
+  txt("Wizard Level " + ai.lvl + "  ·  " + pts + " point" + (pts === 1 ? "" : "s") + " to spend  (1 per level)", W / 2, y + (small ? 40 : 54), 13, pts > 0 ? "#fff" : "#9fb4c6", "center", 700); y += small ? 56 : 74; const y00 = y;
+  UPS.forEach((u, ui) => {
+    const col = cols === 2 ? ui % 2 : 0, rx = x + col * (colw + 12), ry = y00 + (cols === 2 ? Math.floor(ui / 2) : ui) * (rh + 6);
+    const r = upRank(u.id), max = r >= 10, c = upCost(r), can = !max && pts >= c;
+    panel(rx, ry, colw, rh, "rgba(15,22,32,.92)", can ? "#ffd23f" : "#3b5268");
+    ctx.font = (small ? 24 : 30) + "px " + FONT; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#fff"; ctx.fillText(u.icon, rx + 30, ry + rh / 2 - 6);
+    txt(u.name + "  ·  Rank " + r + " / 10", rx + 58, ry + 18, 15, "#fff", "left"); txt(u.d, rx + 58, ry + 36, 10.5, "#9fb4c6", "left", 600);
+    for (let i = 0; i < 10; i++) { ctx.fillStyle = i < r ? "#ffd23f" : "rgba(255,255,255,.14)"; ctx.fillRect(rx + 58 + i * 13, ry + rh - 13, 10, 6); }
+    const bw = 84; button(rx + colw - bw - 8, ry + rh / 2 - 19, bw, 38, max ? "MAX" : can ? "+1 (" + c + " pt)" : "(" + c + " pt)", () => buyUp(u.id), max ? "#6bf0b0" : can ? "#ffd23f" : "#6a7886", 13);
+  });
+  y = y00 + Math.ceil(UPS.length / cols) * (rh + 6);
   y += 4; const bw2 = (pw - 12) / 2;
   button(x, y, bw2, 44, "↺  Reset (refund)", resetUps, "#ff9a9a", 15); button(x + bw2 + 12, y, bw2, 44, "‹  Back", () => { state = "menu"; beep(520, 0.08, "triangle", 0.05); }, "#6bf0b0", 16);
   txt("Earn points by levelling your wizard — each run gives XP. Ranks 6–10 cost 2 points.", W / 2, y + 66, 11, "#789", "center", 600);
@@ -1830,7 +1897,7 @@ function drawEnd(win) {
   const L = (a, b, col = "#fff") => { txt(a, x + 40, ly, 17, "#9fb4c6", "left", 600); txt(b, x + pw - 40, ly, 20, col, "right"); ly += 30; };
   L("Time", endless ? fmt(time) : fmt(time) + " / " + fmt(WIN_TIME)); L("Slain", String(kills));
   if (endless) { L("Slime Kings slain", String(kingsKilled)); L("Cowboys slain", String(cowboysKilled)); }
-  else { L("Slime Kings", kingsKilled + " / " + KINGS_NEEDED, kingsKilled >= KINGS_NEEDED ? "#6bf0b0" : "#fff"); L("The Cowboy", cowboyDead ? "Slain" : (cowboySpawned ? "Alive" : "Unseen"), cowboyDead ? "#6bf0b0" : "#fff"); } L("Level", String(level)); L("Wizard", hero.name + (CP.length ? "  +" + CP.length : ""));
+  else { L("Slime Kings", kingsKilled + " / " + KINGS_NEEDED, kingsKilled >= KINGS_NEEDED ? "#6bf0b0" : "#fff"); L("Cowboy Spider", cowboyDead ? "Slain" : (cowboySpawned ? "Alive" : "Unseen"), cowboyDead ? "#6bf0b0" : "#fff"); } L("Level", String(level)); L("Wizard", hero.name + (CP.length ? "  +" + CP.length : ""));
   if (run.absorbed > 0) L("Damage tanked", String(Math.round(run.absorbed)), "#9ccaff");
   if (run.healed > 0) L("Healed by Lumen", String(Math.round(run.healed)), "#fff2a0");
   if (lastGain) {
