@@ -508,7 +508,7 @@ function updateWeapons(dt) {
     if (!m.hit && m.t >= 1.8) { m.hit = true; m.on = 15; splash(m.x, m.y, 250 + 30 * m.L, 110 + 40 * m.L, "255,80,40"); burst(m.x, m.y, 44, "#ff9a3a", 340, 0.9); shake = 30; flashT = 0.9; hitStop = 0.1; banner = { text: "🔥 THE SKY BURNS!", life: 2.2, color: "#ff6a4a" }; sfx.boom(); }
     if (m.hit) {
       m.on -= dt; m.tk -= dt; m.tk2 -= dt;
-      if (m.tk <= 0) { m.tk = 0.5; for (const e of E) { if (e.dead) continue; const big = e.type === "boss" || e.type === "spider"; dmgEnemy(e, big ? e.maxhp * 0.004 / 0.05 : 4 + 3 * m.L, 0, 0, 0); } }
+      if (m.tk <= 0) { m.tk = 0.5; for (const e of E) { if (e.dead) continue; const big = e.type === "boss" || e.type === "spider"; dmgEnemy(e, big ? e.maxhp * 0.004 : 4 + 3 * m.L, 0, 0, 0, big); } }
       if (m.tk2 <= 0) { m.tk2 = 1; if (!(P.inv > 0)) { P.hp = Math.max(1, P.hp - st.maxhp * 0.012); P.hurt = 0.12; addText(P.x, P.y - 30, "🔥", "#ff8a4a", 14); } for (const c of CP) if (c.def.kind === "tank" && c.hp > 3) c.hp -= 3; }
       if (m.on <= 0) MS = null;
     }
@@ -548,7 +548,7 @@ function meltdown() {
   P.hp = Math.max(1, Math.ceil(P.hp / 2)); P.rdCD = 150; P.hurt = 0.3;
   RN.push({ x: P.x, y: P.y, r: 0, max: 680, sp: 950, dmg: 0, hit: new Set(), col: "170,255,110", visual: true });
   RN.push({ x: P.x, y: P.y, r: 0, max: 440, sp: 650, dmg: 0, hit: new Set(), col: "255,255,255", visual: true });
-  for (const e of E) { if (e.dead) continue; if (Math.hypot(e.x - P.x, e.y - P.y) < 680) { const big = e.type === "boss" || e.type === "spider"; dmgEnemy(e, big ? e.maxhp * 0.08 / 0.05 : 140 + 8 * level, e.x - P.x, e.y - P.y, 520, true); } }
+  for (const e of E) { if (e.dead) continue; if (Math.hypot(e.x - P.x, e.y - P.y) < 680) { const big = e.type === "boss" || e.type === "spider"; dmgEnemy(e, big ? e.maxhp * 0.08 : 140 + 8 * level, e.x - P.x, e.y - P.y, 520, true); } }
   ES = [];
   RAD.push({ x: P.x, y: P.y, r: 330, life: 60, max: 60, tick: 0.5 });
   flashT = 1; shake = 36; hitStop = 0.12; sfx.boom(); beep(70, 0.9, "sawtooth", 0.08, -30);
@@ -557,7 +557,7 @@ function meltdown() {
 function updateRad(dt) {
   for (const r of RAD) {
     r.life -= dt; r.tick -= dt;
-    if (r.tick <= 0) { r.tick = 0.5; for (const e of E) { if (e.dead) continue; if (Math.hypot(e.x - r.x, e.y - r.y) < r.r + e.r) { const big = e.type === "boss" || e.type === "spider"; dmgEnemy(e, big ? e.maxhp * 0.0025 / 0.05 : 12 + 0.6 * level, 0, 0, 0, true); } } }
+    if (r.tick <= 0) { r.tick = 0.5; for (const e of E) { if (e.dead) continue; if (Math.hypot(e.x - r.x, e.y - r.y) < r.r + e.r) { const big = e.type === "boss" || e.type === "spider"; dmgEnemy(e, big ? e.maxhp * 0.0025 : 12 + 0.6 * level, 0, 0, 0, true); } } }
   }
   RAD = RAD.filter(r => r.life > 0);
 }
@@ -605,7 +605,7 @@ function updateDeflect(dt) {
     if (s.life <= 0 || Math.hypot(s.x - P.x, s.y - P.y) > P.dfR + s.r) continue;
     s.life = 0; const t = nearest(s.x, s.y, 700), sp = Math.max(420, Math.hypot(s.vx, s.vy) * 1.8);
     let a = Math.atan2(-s.vy, -s.vx); if (t) a = Math.atan2(t.y - s.y, t.x - s.x);
-    S.push({ k: "bolt", x: s.x, y: s.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1.6, dmg: 14 + s.dmg * 2.5, pierce: 1, hit: new Set(), r: s.r + 3, col: "#fff3a0", glow: "rgba(255,220,80,.5)", home: true });
+    S.push({ k: "bolt", x: s.x, y: s.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1.6, dmg: 14 + s.dmg * 2.5, pierce: 1, hit: new Set(), r: s.r + 3, refl: true, col: "#fff3a0", glow: "rgba(255,220,80,.5)", home: true });
     burst(s.x, s.y, 6, "#ffe14a", 140, 0.35); beep(1000 + rnd(0, 300), 0.05, "square", 0.03);
   }
 }
@@ -1010,7 +1010,7 @@ function update(dt) {
         if (e.dead || s.hit.has(e)) continue;
         const dx = e.x - s.x, dy = e.y - s.y;
         if (dx * dx + dy * dy < (e.r + s.r) ** 2) {
-          s.hit.add(e); dmgEnemy(e, s.dmg, s.vx, s.vy, 150); if (s.ice) e.slowT = 2;
+          s.hit.add(e); dmgEnemy(e, s.refl && (e.type === "boss" || e.type === "spider") ? Math.min(s.dmg, e.maxhp * 0.002) : s.dmg, s.vx, s.vy, 150, !!s.refl); if (s.ice) e.slowT = 2;
           burst(s.x, s.y, 3, "#cbb8ff", 90, 0.25);
           if (s.pierce-- <= 0) { s.life = 0; break; }
         }
