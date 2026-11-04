@@ -143,6 +143,7 @@ const DIFFS = [
 const FILTERS = [["all", "All", "All"], ["attack", "⚔", "⚔ Attack"], ["tank", "🛡", "🛡 Tank"], ["heal", "💚", "💚 Heal"], ["support", "🌀", "🌀 Support"], ["buff", "✨", "✨ Buff"]];
 const ROLE_COL = { attack: "#ff8a6a", tank: "#7ab8ff", heal: "#8cf08c", support: "#6fe0d0", buff: "#f09aff" };
 let WIN_TIME = 300, PACE = 1.47;
+const METEOR_CHANCE = 0.05;
 const BASE_SLOTS = 2, MAX_COMP = 5, SPIDER_AT = 90, KINGS_NEEDED = 3;
 
 /* ================= state ================= */
@@ -806,7 +807,12 @@ function recruit(def) {
 }
 function openLevel() {
   const pool = [];
-  for (const id in WDEF) if ((wl[id] || 0) < 5) pool.push({ kind: "w", id });
+  for (const id in WDEF) {
+    if ((wl[id] || 0) >= 5) continue;
+    // Meteor Storm is rare: only a 5% chance to enter the pool until you own it (change METEOR_CHANCE to tune)
+    if (id === "meteor" && !wl.meteor && Math.random() > METEOR_CHANCE) continue;
+    pool.push({ kind: "w", id });
+  }
   for (const id in PDEF) if ((pl[id] || 0) < 5) pool.push({ kind: "p", id });
   const out = [];
   while (out.length < 3 && pool.length) out.push(pool.splice(rint(0, pool.length - 1), 1)[0]);
