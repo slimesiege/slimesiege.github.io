@@ -18,7 +18,7 @@
 <script>
 (() => {
 "use strict";
-const VERSION = "v1.48"; // Manual King summons, Slimecaller wizard, spider cobwebs and Luck rarity boost
+const VERSION = "v1.50"; // Version label restored to top-right
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -137,7 +137,7 @@ const CATALOG = [
   { name: "Volt", title: "the Spark", role: "attack", color: "#fff06a", hat: "#6a5a08", kind: "chain", ab: "Chain Zap", d: "Lightning jumps between foes" },
   { name: "Mystic", title: "the Seer", role: "buff", color: "#f09aff", hat: "#5a1a6a", kind: "dmgaura", ab: "Arcane Aura", d: "+15% damage for the party" },
   { name: "Orbi", title: "the Collector", role: "buff", color: "#ff9bd8", hat: "#7a2a6a", kind: "grabber", ab: "Orb Grab", d: "Flies out and grabs the orbs enemies drop" },
-  { name: "Rad", title: "the Reactor", role: "attack", color: "#b6ff6a", hat: "#2a5a10", kind: "reactor", ab: "Meltdown", d: "Triggers a nuclear meltdown when swarmed (costs half your HP, 150s cooldown)" },
+  { name: "Rad", title: "the Reactor", role: "attack", color: "#b6ff6a", hat: "#2a5a10", kind: "reactor", ab: "Meltdown", d: "Press R to trigger a nuclear meltdown (costs half your HP, 150s cooldown)" },
   { name: "Lucky", title: "the Gambler", role: "buff", color: "#ffc83a", hat: "#6a4a08", kind: "xpaura", ab: "Lucky Charm", d: "+25% XP from gems" },
   { name: "Moss", title: "the Slimecaller", role: "attack", color: "#8cf08c", hat: "#245c2a", kind: "slimecaller", ab: "Slime Summon", d: "Summons friendly slimes that attack nearby foes and focus the Slime King" },
 ];
@@ -171,8 +171,9 @@ let diffIdx = 1, DF = DIFFS[1], run = { absorbed: 0, healed: 0 }, endNote = "", 
 const menuS = { s: 0, max: 0 }, grids = { cat: { s: 0, max: 0 }, rec: { s: 0, max: 0 } };
 let uiLock = false, catFilter = "all", recChoices = [], recAll = false;
 try { const bb = JSON.parse(localStorage.getItem("slimesiege_best3") || "{}"); if (bb && typeof bb === "object") bests = bb; } catch (e) {}
-let acct = { xp: 0, up: {} };
-try { const aa = JSON.parse(localStorage.getItem("slimesiege_acct") || "null"); if (aa && aa.xp > 0) acct.xp = aa.xp; if (aa && aa.up) acct.up = aa.up; } catch (e) {}
+let acct = { xp: 0, up: {}, wiz: {} };
+let selectedWizardUpgrade = "Atlas";
+try { const aa = JSON.parse(localStorage.getItem("slimesiege_acct") || "null"); if (aa && aa.xp > 0) acct.xp = aa.xp; if (aa && aa.up) acct.up = aa.up; if (aa && aa.wiz) acct.wiz = aa.wiz; } catch (e) {}
 const lvNeed = l => 120 + 60 * l;
 function acctInfo(xp = acct.xp) { let l = 0, r = xp; while (r >= lvNeed(l) && l < 99) { r -= lvNeed(l); l++; } return { lvl: l, cur: Math.floor(r), need: lvNeed(l) }; }
 function slots() { return Math.min(MAX_COMP, BASE_SLOTS + Math.floor(acctInfo().lvl / 10)); }
@@ -194,6 +195,17 @@ const upRank = id => (acct.up && acct.up[id]) | 0;
 const upCost = r => r < 5 ? 1 : 2;
 function upSpent() { let t = 0; for (const u of UPS) for (let r = 0; r < upRank(u.id); r++) t += upCost(r); return t; }
 const upPoints = () => acctInfo().lvl - upSpent();
+function wizardRanks(name) { if (!acct.wiz[name]) acct.wiz[name] = { power: 0, haste: 0, vitality: 0 }; return acct.wiz[name]; }
+const WIZ_UPS = [
+  { id: "power", name: "Power", icon: "⚔️", desc: "+12% ability damage per rank" },
+  { id: "haste", name: "Haste", icon: "⏱️", desc: "Abilities recharge 8% faster per rank" },
+  { id: "vitality", name: "Vitality", icon: "💚", desc: "+12% healing, summon duration and toughness per rank" },
+];
+function wizardSpent(name) { const r = wizardRanks(name); return WIZ_UPS.reduce((n, u) => n + r[u.id], 0); }
+function wizardPoints(name) { return acctInfo().lvl - wizardSpent(name); }
+function buyWizardUp(name, id) { const r = wizardRanks(name); if (r[id] >= 5 || wizardPoints(name) <= 0) { beep(160, 0.15, "square", 0.05); return; } r[id]++; saveAcct(); beep(700 + r[id] * 60, 0.1, "triangle", 0.06); }
+function wPower(c, n) { return n * (1 + 0.12 * (wizardRanks(c.def.name).power || 0)); }
+function wVitality(c) { return 1 + 0.12 * (wizardRanks(c.def.name).vitality || 0); }
 function saveAcct() { try { localStorage.setItem("slimesiege_acct", JSON.stringify(acct)); } catch (e) {} }
 function buyUp(id) { const r = upRank(id); if (r >= 10 || upPoints() < upCost(r)) { beep(160, 0.15, "square", 0.05); return; } acct.up[id] = r + 1; saveAcct(); beep(700 + r * 60, 0.1, "triangle", 0.06); beep(1000 + r * 60, 0.1, "triangle", 0.05, 0, 0.07); }
 function resetUps() { acct.up = {}; saveAcct(); beep(300, 0.15, "sine", 0.05, 100); }
@@ -708,20 +720,20 @@ function updateFriendlySlimes(dt) {
     if (!target) { const dx = P.x - s.x, dy = P.y - s.y, d = Math.hypot(dx, dy) || 1; if (d > 90) { s.x += dx / d * 145 * dt; s.y += dy / d * 145 * dt; } continue; }
     const dx = target.x - s.x, dy = target.y - s.y, d = Math.hypot(dx, dy) || 1;
     if (d > target.r + 16) { s.x += dx / d * 175 * dt; s.y += dy / d * 175 * dt; }
-    else if (s.cd <= 0) { dmgEnemy(target, target.type === "boss" ? 24 : 16, dx, dy, 30); s.cd = 0.7; burst(s.x, s.y, 5, "#8cf08c", 85, 0.3); }
+    else if (s.cd <= 0) { dmgEnemy(target, wPower({def:{name:"Moss"}}, target.type === "boss" ? 24 : 16), dx, dy, 30); s.cd = 0.7; burst(s.x, s.y, 5, "#8cf08c", 85, 0.3); }
   }
   FS = FS.filter(s => s.life > 0);
 }
 function updateCompanions(dt) {
   const n = CP.length, st = stat();
   CP.forEach((c, i) => {
-    c.t += dt; c.cd -= dt * st.haste;
+    c.t += dt; c.cd -= dt * st.haste * (1 + 0.08 * (wizardRanks(c.def.name).haste || 0));
     const k = c.def.kind, a = time * 0.5 + i * TAU / Math.max(n, 1), rad = (k === "guard" || k === "tank") ? 42 : 64 + (i % 2) * 14;
     const fx = P.x + Math.cos(a) * rad, fy = P.y + Math.sin(a) * rad * 0.8 - 6;
     c.face = P.x >= c.x ? 1 : -1;
     switch (k) {
       case "tank": {
-        const mh = 150 + 8 * (level - 1);
+        const mh = (150 + 8 * (level - 1)) * wVitality(c);
         if (mh > c.maxhp) { if (c.hp > 0) c.hp += mh - c.maxhp; c.maxhp = mh; }
         c.hit -= dt;
         if (c.hp > 0) {
@@ -759,16 +771,10 @@ function updateCompanions(dt) {
           if (d < 20) { tg.taken = true; xp += tg.v * 1.4 * DF.xp * (hasComp("Lucky") ? 1.25 : 1); burst(tg.x, tg.y, 4, "#ff9bd8", 90, 0.35); gemCombo++; gemComboT = 0.4; }
         } else if (c.mode === "grab") c.mode = "follow";
         break; }
-      case "reactor": {
-        if (P.rdCD <= 0 && P.hp > st.maxhp * 0.55) {
-          let near = 0, big = false;
-          for (const e of E) { if (e.dead) continue; const d = Math.hypot(e.x - P.x, e.y - P.y); if (d < 380) near++; if (d < 520 && (e.type === "boss" || e.type === "cowboy")) big = true; }
-          if (near >= 22 || big) meltdown(c.def.name);
-        }
-        break; }
+      case "reactor": break; // Activated manually with R
       case "cleric": {
         c.pt -= dt;
-        if (c.pt <= 0) { c.pt = 10; c.n++; healParty(Math.min(99999, 2 * (10 + 5 * (c.n - 1)) * Math.pow(2, Math.floor(c.n / 3)))); }
+        if (c.pt <= 0) { c.pt = 10; c.n++; healParty(Math.min(99999, 2 * (10 + 5 * (c.n - 1)) * Math.pow(2, Math.floor(c.n / 3)) * wVitality(c))); }
         break; }
       case "dasher":
         if (c.mode === "follow") { if (c.cd <= 0) { const t = nearest(P.x, P.y, 300); if (t) { c.mode = "strike"; c.tgt = t; } else c.cd = 0.2; } }
@@ -776,7 +782,7 @@ function updateCompanions(dt) {
           const t = c.tgt;
           if (!t || t.dead) { c.mode = "return"; break; }
           const dx = t.x - c.x, dy = t.y - c.y, d = Math.hypot(dx, dy) || 1, step = 760 * dt;
-          if (d < t.r + 14) { dmgEnemy(t, 30, dx, dy, 220); burst(t.x, t.y, 8, c.def.color, 150, 0.35); c.cd = 1.2; c.mode = "return"; }
+          if (d < t.r + 14) { dmgEnemy(t, wPower(c, 30), dx, dy, 220); burst(t.x, t.y, 8, c.def.color, 150, 0.35); c.cd = 1.2; c.mode = "return"; }
           else { c.x += dx / d * step; c.y += dy / d * step; burst(c.x, c.y, 1, c.def.color, 20, 0.3); }
         } else if (c.mode === "return") {
           const dx = fx - c.x, dy = fy - c.y, d = Math.hypot(dx, dy) || 1;
@@ -790,29 +796,29 @@ function updateCompanions(dt) {
         for (const e of E) { if (e.dead) continue; const dx = e.x - c.x, dy = e.y - c.y; if (dx * dx + dy * dy < (150 + e.r) ** 2) e.slowT = 0.25; }
         break;
       case "fire":
-        if (c.cd <= 0) { const t = nearest(c.x, c.y, 500); if (t) { const an = Math.atan2(t.y - c.y, t.x - c.x); S.push({ k: "fire", x: c.x, y: c.y, vx: Math.cos(an) * 340, vy: Math.sin(an) * 340, life: 1.6, dmg: 20, r: 9 }); c.cd = 2.1; sfx.shoot(); } else c.cd = 0.3; }
+        if (c.cd <= 0) { const t = nearest(c.x, c.y, 500); if (t) { const an = Math.atan2(t.y - c.y, t.x - c.x); S.push({ k: "fire", x: c.x, y: c.y, vx: Math.cos(an) * 340, vy: Math.sin(an) * 340, life: 1.6, dmg: wPower(c, 20), r: 9 }); c.cd = 2.1; sfx.shoot(); } else c.cd = 0.3; }
         break;
       case "slimecaller":
         if (c.cd <= 0 && FS.length < 4) {
-          FS.push({ x: c.x, y: c.y, life: 14, max: 14, cd: 0.35, t: rnd(0, 6) });
+          FS.push({ x: c.x, y: c.y, life: 14 * wVitality(c), max: 14 * wVitality(c), cd: 0.35, t: rnd(0, 6) });
           c.cd = 5.5; burst(c.x, c.y, 10, "#8cf08c", 130, 0.5);
           addText(c.x, c.y - 42, "SLIME SUMMONED!", "#8cf08c", 14); beep(520, 0.12, "triangle", 0.05, 260);
         }
         break;
       case "ice":
-        if (c.cd <= 0) { const t = nearest(c.x, c.y, 480); if (t) { const an = Math.atan2(t.y - c.y, t.x - c.x); S.push({ k: "bolt", ice: true, glow: "rgba(120,220,255,.4)", col: "#d8f6ff", x: c.x, y: c.y, vx: Math.cos(an) * 460, vy: Math.sin(an) * 460, life: 1, dmg: 10, pierce: 0, hit: new Set(), r: 6 }); c.cd = 0.85; } else c.cd = 0.2; }
+        if (c.cd <= 0) { const t = nearest(c.x, c.y, 480); if (t) { const an = Math.atan2(t.y - c.y, t.x - c.x); S.push({ k: "bolt", ice: true, glow: "rgba(120,220,255,.4)", col: "#d8f6ff", x: c.x, y: c.y, vx: Math.cos(an) * 460, vy: Math.sin(an) * 460, life: 1, dmg: wPower(c, 10), pierce: 0, hit: new Set(), r: 6 }); c.cd = 0.85; } else c.cd = 0.2; }
         break;
       case "healer":
-        if (c.cd <= 0) { c.cd = 3; if (P.hp < st.maxhp) { P.hp = Math.min(st.maxhp, P.hp + 4); addText(P.x, P.y - 34, "+4", "#8cf08c", 14); burst(P.x, P.y, 6, "#8cf08c", 60, 0.5); } else c.cd = 0.5; }
+        if (c.cd <= 0) { c.cd = 3; if (P.hp < st.maxhp) { P.hp = Math.min(st.maxhp, P.hp + 4 * wVitality(c)); addText(P.x, P.y - 34, "+" + Math.round(4 * wVitality(c)), "#8cf08c", 14); burst(P.x, P.y, 6, "#8cf08c", 60, 0.5); } else c.cd = 0.5; }
         break;
       case "homing":
-        if (c.cd <= 0) { const t = nearest(c.x, c.y, 450); if (t) { const base = Math.atan2(t.y - c.y, t.x - c.x); for (const o of [-0.5, 0.5]) S.push({ k: "bolt", home: true, glow: "rgba(180,100,255,.4)", col: "#ead0ff", x: c.x, y: c.y, vx: Math.cos(base + o) * 330, vy: Math.sin(base + o) * 330, life: 2.2, dmg: 14, pierce: 0, hit: new Set(), r: 6 }); c.cd = 2.2; sfx.shoot(); } else c.cd = 0.3; }
+        if (c.cd <= 0) { const t = nearest(c.x, c.y, 450); if (t) { const base = Math.atan2(t.y - c.y, t.x - c.x); for (const o of [-0.5, 0.5]) S.push({ k: "bolt", home: true, glow: "rgba(180,100,255,.4)", col: "#ead0ff", x: c.x, y: c.y, vx: Math.cos(base + o) * 330, vy: Math.sin(base + o) * 330, life: 2.2, dmg: wPower(c, 14), pierce: 0, hit: new Set(), r: 6 }); c.cd = 2.2; sfx.shoot(); } else c.cd = 0.3; }
         break;
       case "spikes":
         if (c.cd <= 0) {
           const cand = E.filter(e => !e.dead && Math.hypot(e.x - P.x, e.y - P.y) < 320);
           if (cand.length) {
-            for (let j = 0; j < 3 && cand.length; j++) { const t = cand.splice(rint(0, cand.length - 1), 1)[0]; RN.push({ x: t.x, y: t.y, r: 0, max: 45, sp: 260, dmg: 0, hit: new Set(), col: "190,140,80", visual: true }); burst(t.x, t.y, 8, "#b08a5a", 120, 0.5); dmgEnemy(t, 26, 0, 0, 140); }
+            for (let j = 0; j < 3 && cand.length; j++) { const t = cand.splice(rint(0, cand.length - 1), 1)[0]; RN.push({ x: t.x, y: t.y, r: 0, max: 45, sp: 260, dmg: 0, hit: new Set(), col: "190,140,80", visual: true }); burst(t.x, t.y, 8, "#b08a5a", 120, 0.5); dmgEnemy(t, wPower(c, 26), 0, 0, 140); }
             c.cd = 2.6; beep(120, 0.2, "square", 0.05, -40);
           } else c.cd = 0.3;
         }
@@ -821,7 +827,7 @@ function updateCompanions(dt) {
         if (c.cd <= 0) {
           if (E.some(e => !e.dead && Math.hypot(e.x - c.x, e.y - c.y) < 170)) {
             RN.push({ x: c.x, y: c.y, r: 0, max: 170, sp: 520, dmg: 0, hit: new Set(), col: "210,240,255", visual: true });
-            for (const e of E) { if (e.dead) continue; const dx = e.x - c.x, dy = e.y - c.y; if (dx * dx + dy * dy < (170 + e.r) ** 2) dmgEnemy(e, 6, dx, dy, 460); }
+            for (const e of E) { if (e.dead) continue; const dx = e.x - c.x, dy = e.y - c.y; if (dx * dx + dy * dy < (170 + e.r) ** 2) dmgEnemy(e, wPower(c, 6), dx, dy, 460); }
             c.cd = 3.2; beep(300, 0.3, "sine", 0.05, 200);
           } else c.cd = 0.3;
         }
@@ -833,7 +839,7 @@ function updateCompanions(dt) {
             const seen = new Set(); let cur = first, from = { x: c.x, y: c.y }, cnt = 0;
             while (cur && cnt < 4) {
               seen.add(cur); FX.push({ pts: [{ x: from.x, y: from.y }, { x: cur.x, y: cur.y }], life: 0.16, max: 0.16, w: 3 });
-              dmgEnemy(cur, 16, 0, 0, 40); from = { x: cur.x, y: cur.y }; cnt++;
+              dmgEnemy(cur, wPower(c, 16), 0, 0, 40); from = { x: cur.x, y: cur.y }; cnt++;
               let nx = null, bd = 150 * 150;
               for (const e of E) { if (e.dead || seen.has(e)) continue; const dx = e.x - from.x, dy = e.y - from.y, dd = dx * dx + dy * dy; if (dd < bd) { bd = dd; nx = e; } }
               cur = nx;
@@ -1818,13 +1824,14 @@ function drawCompanionScreen() {
 function drawMenu() {
   uiLock = state === "companions";
   ctx.fillStyle = "rgba(8,14,22,.55)"; ctx.fillRect(0, 0, W, H);
+  txt(VERSION, W - 16, 20, 13, "#9fb4c6", "right", 700);
   const botH = 86, bot = H - botH, colW = Math.min(W - 30, 900), x0 = W / 2 - colW / 2, gap = 12, S = menuS.s;
   const inside = (x, y, w, h) => !uiLock && pointer.y < bot && inRect(x, y - S, w, h);
   const hit = (x, y, w, h, fn) => addRect(x, y - S, w, h, fn, 0, bot);
   ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, bot); ctx.clip(); ctx.translate(0, -S);
   let y = 12;
   const ts = clamp(W / 9, 34, 64);
-  txt("SLIME SIEGE", W / 2, y + ts / 2 + Math.sin(menuT * 2) * 3, ts, "#6bf0b0"); y += ts + 6;
+  txt("Slime Siege", W / 2, y + ts / 2 + Math.sin(menuT * 2) * 3, ts, "#6bf0b0"); y += ts + 6;
   txt(endless ? "Endless: no win, no time limit. See how long you can last." : "Pick a wizard and difficulty. Each run lasts a random 5–10 minutes.", W / 2, y + 6, clamp(W / 34, 11, 16), "#d8e6f2", "center", 600);
   txt(endless ? "A King every 2:30; every 3rd King summons the Cowboy Spider." : "To win: slay 3 Slime Kings — the 3rd summons the Cowboy Spider — then slay it.", W / 2, y + 26, clamp(W / 38, 11, 14), "#ffb0b8", "center", 700); y += 46;
   { const ai = acctInfo(), ph2 = 62; panel(x0, y, colW, ph2, "rgba(15,22,32,.9)", "#c9a8ff");
@@ -1836,6 +1843,9 @@ function drawMenu() {
   { const pts = upPoints(), uh = 40, hv = inside(x0, y, colW, uh); panel(x0, y, colW, uh, hv ? "rgba(34,50,70,.97)" : "rgba(15,22,32,.9)", pts > 0 ? "#ffd23f" : "#3b5268");
     txt("⬆  Upgrade stats", x0 + 16, y + 21, 15, "#fff", "left"); txt(pts + " point" + (pts === 1 ? "" : "s") + " to spend  ›", x0 + colW - 16, y + 21, 13, pts > 0 ? "#ffd23f" : "#9fb4c6", "right", 700);
     hit(x0, y, colW, uh, () => { state = "upgrades"; beep(560, 0.08, "triangle", 0.05); }); y += uh + 14; }
+  { const uh = 42, hv = inside(x0, y, colW, uh); panel(x0, y, colW, uh, hv ? "rgba(34,50,70,.97)" : "rgba(15,22,32,.9)", "#c9a8ff");
+    txt("🧙  Upgrade Wizards", x0 + 16, y + 22, 16, "#fff", "left"); txt("Individual stats for every wizard  ›", x0 + colW - 16, y + 22, 12, "#c9a8ff", "right", 700);
+    hit(x0, y, colW, uh, () => { state = "wizardUpgrades"; selectedWizardUpgrade = CATALOG.find(c => isUnlocked(c))?.name || "Atlas"; beep(560, 0.08, "triangle", 0.05); }); y += uh + 14; }
   txt("WIZARD", x0, y + 6, 13, "#ffd23f", "left"); y += 22;
   if (colW >= 600) {
     const cw = (colW - gap * 2) / 3, ch = 210;
@@ -1887,7 +1897,7 @@ function drawMenu() {
   txt("›", x0 + colW - 20, y + bh / 2, 30, "#c9a8ff");
   hit(x0, y, colW, bh, () => { state = "companions"; grids.cat.s = 0; beep(560, 0.08, "triangle", 0.05); });
   y += bh + 14;
-  txt(usingTouch ? "Tap to choose  ·  drag to scroll  ·  in a run: drag to move, tap the round buttons" : "Move: WASD / arrows   ·   Aim: mouse   ·   SPACE: ability   ·   SHIFT: sprint   ·   F: deflect   ·   P: pause   ·   M: mute   ·   ← → difficulty   ·   C: companions   ·   U: upgrades", W / 2, y + 6, clamp(W / 70, 9, 11), "#789", "center", 600);
+  txt(usingTouch ? "Tap to choose  ·  drag to scroll  ·  in a run: drag to move, tap the round buttons" : "Move: WASD / arrows   ·   Aim: mouse   ·   SPACE: ability   ·   SHIFT: sprint   ·   F: deflect   ·   R: Rad meltdown   ·   P: pause   ·   M: mute   ·   ← → difficulty   ·   C: companions   ·   U: upgrades", W / 2, y + 6, clamp(W / 70, 9, 11), "#789", "center", 600);
   y += 26;
   menuS.max = Math.max(0, y - bot + 6); menuS.s = clamp(menuS.s, 0, menuS.max);
   ctx.restore();
@@ -1917,6 +1927,26 @@ function drawUpgradeScreen() {
   y += 4; const bw2 = (pw - 12) / 2;
   button(x, y, bw2, 44, "↺  Reset (refund)", resetUps, "#ff9a9a", 15); button(x + bw2 + 12, y, bw2, 44, "‹  Back", () => { state = "menu"; beep(520, 0.08, "triangle", 0.05); }, "#6bf0b0", 16);
   txt("Earn points by levelling your wizard — each run gives XP. Ranks 6–10 cost 2 points.", W / 2, y + 66, 11, "#789", "center", 600);
+}
+function drawWizardUpgradeScreen() {
+  uiLock = false; ctx.fillStyle = "rgba(8,14,22,.94)"; ctx.fillRect(0, 0, W, H);
+  const pw = Math.min(760, W - 24), x = W / 2 - pw / 2; let y = 14;
+  txt("Upgrade Wizards", W / 2, y + 24, Math.min(32, W / 12), "#c9a8ff"); y += 54;
+  const unlocked = CATALOG.filter(isUnlocked), cols = W >= 620 ? 3 : 2, gap = 8, bw = (pw - gap * (cols - 1)) / cols, bh = 42;
+  unlocked.forEach((c, i) => { const xx = x + (i % cols) * (bw + gap), yy = y + Math.floor(i / cols) * (bh + gap), sel = selectedWizardUpgrade === c.name;
+    panel(xx, yy, bw, bh, sel ? "rgba(201,168,255,.22)" : "rgba(15,22,32,.92)", sel ? "#c9a8ff" : "#3b5268");
+    txt(c.name, xx + bw / 2, yy + 22, Math.min(15, bw / 7), sel ? "#fff" : c.color); addRect(xx, yy, bw, bh, () => { selectedWizardUpgrade = c.name; });
+  });
+  y += Math.ceil(unlocked.length / cols) * (bh + gap) + 12;
+  const c = CATALOG.find(q => q.name === selectedWizardUpgrade) || unlocked[0], ranks = wizardRanks(c.name), pts = wizardPoints(c.name);
+  miniWizard(W / 2, y + 24, c.color, c.hat, 0.8, 1); txt(c.name + " the " + c.title, W / 2, y + 62, 18, c.color); txt(pts + " individual upgrade point" + (pts === 1 ? "" : "s") + " available", W / 2, y + 84, 12, pts > 0 ? "#ffd23f" : "#9fb4c6"); y += 102;
+  WIZ_UPS.forEach((u, i) => { const ry = y + i * 68, r = ranks[u.id], can = r < 5 && pts > 0, rh = 58;
+    panel(x, ry, pw, rh, "rgba(15,22,32,.94)", can ? "#c9a8ff" : "#3b5268");
+    txt(u.icon + "  " + u.name + "  ·  Rank " + r + " / 5", x + 16, ry + 19, 15, "#fff", "left"); txt(u.desc, x + 16, ry + 40, 11, "#9fb4c6", "left");
+    button(x + pw - 112, ry + 10, 98, 38, r >= 5 ? "MAX" : can ? "+1 point" : "Locked", () => buyWizardUp(c.name, u.id), can ? "#c9a8ff" : "#667381", 12);
+  });
+  const by = Math.min(H - 54, y + WIZ_UPS.length * 68 + 8); button(W / 2 - 100, by, 200, 40, "‹  Back", () => { state = "menu"; beep(520, 0.08, "triangle", 0.05); }, "#6bf0b0", 15);
+  if (H < by + 48) txt("Scroll to see all wizard upgrades", W / 2, H - 8, 10, "#789");
 }
 function drawPause() {
   uiLock = false;
@@ -1959,7 +1989,7 @@ function drawEnd(win) {
 function render() {
   ctx.fillStyle = "#2b4a3a"; ctx.fillRect(0, 0, W, H);
   rects = []; uiLock = false;
-  const inMenu = state === "menu" || state === "companions" || state === "upgrades";
+  const inMenu = state === "menu" || state === "companions" || state === "upgrades" || state === "wizardUpgrades";
   if (inMenu) { camX = Math.cos(menuT * 0.3) * 300; camY = Math.sin(menuT * 0.25) * 300; }
   else if (P) { camX = P.x; camY = P.y; }
   ctx.save();
@@ -1968,7 +1998,7 @@ function render() {
   if (inMenu) drawGround(); else drawWorld();
   ctx.restore();
   if (freeze > 0 && !inMenu) { ctx.fillStyle = `rgba(90,170,255,${0.12 + 0.05 * Math.sin(time * 10)})`; ctx.fillRect(0, 0, W, H); }
-  if (inMenu) { if (state === "companions") drawCompanionScreen(); else if (state === "upgrades") drawUpgradeScreen(); else drawMenu(); }
+  if (inMenu) { if (state === "companions") drawCompanionScreen(); else if (state === "upgrades") drawUpgradeScreen(); else if (state === "wizardUpgrades") drawWizardUpgradeScreen(); else drawMenu(); }
   else {
     drawScreenFx(); drawHUD(); drawAbility(); drawDeflectBtn(); drawSprintBtn(); drawCrosshair(); drawCompHud(); drawMedArrows(); drawZoneArrows();
     if (state === "level") drawLevel();
@@ -1980,7 +2010,6 @@ function render() {
   // vignette
   const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.hypot(W, H) * 0.6);
   g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,.4)"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  txt(VERSION, W - 8, 8, 11, "rgba(255,255,255,.75)", "right", 700);
   if (P && P.hurt > 0 && state === "play") { ctx.fillStyle = `rgba(255,40,60,${P.hurt * 0.8})`; ctx.fillRect(0, 0, W, H); }
 }
 
@@ -1998,6 +2027,7 @@ addEventListener("keydown", e => {
     if (state === "play") {
       if (c === "Space" && !paused) useAbility();
       if (c === "KeyF" && !paused) deflect();
+      if (c === "KeyR" && !paused && hasComp("Rad")) meltdown("Rad");
       if (c === "KeyK" && !paused) summonKing();
       if (c === "KeyP" || c === "Escape") paused = !paused;
     } else if (state === "menu") {
@@ -2007,7 +2037,7 @@ addEventListener("keydown", e => {
       if (c === "KeyC") { state = "companions"; grids.cat.s = 0; }
       if (c === "KeyU") state = "upgrades";
       if (c === "Enter" || c === "Space") startFromMenu();
-    } else if (state === "upgrades") {
+    } else if (state === "upgrades" || state === "wizardUpgrades") {
       if (c === "Escape" || c === "Enter" || c === "KeyU") state = "menu";
     } else if (state === "companions") {
       if (c === "Escape" || c === "Enter" || c === "Space" || c === "KeyC") closeCompanions();
@@ -2033,7 +2063,7 @@ cv.addEventListener("pointermove", e => {
 cv.addEventListener("pointerdown", e => {
   audio(); pointer.x = e.clientX; pointer.y = e.clientY;
   usingMouse = e.pointerType === "mouse"; if (!usingMouse) usingTouch = true; else usingTouch = false;
-  if (state === "upgrades") { clickRects(); return; }
+  if (state === "upgrades" || state === "wizardUpgrades") { clickRects(); return; }
   if (state === "menu" || state === "companions" || state === "recruit") { const so = scrollObj(); menuDrag = { y: e.clientY, s: so ? so.s : 0, moved: false, so }; return; }
   if (state === "level") { clickRects(); return; }
   if (state === "over" || state === "win") { if (overT > 0.8) clickRects(); return; }
