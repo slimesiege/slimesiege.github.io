@@ -18,7 +18,7 @@
 <script>
 (() => {
 "use strict";
-const VERSION = "v1.50"; // Version label restored to top-right
+const VERSION = "v1.52"; // Orb currency, unified upgrades, permanent shop, enemy traits and manual meteor
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -96,6 +96,7 @@ const WDEF = {
   flame: { name: "Flame Trail", icon: "🔥", d: ["", "Leave burning fire behind you", "Bigger, longer fire", "Burns harder", "Fire lasts longer", "Inferno trail"] },
   meteor: { name: "Meteor Storm", icon: "☄️", d: ["", "Every 30s a meteor hits — the sky burns red for 15s, hurting everything", "Harder crash & burn", "Bigger crater", "Burns even hotter", "Apocalypse"] },
   boom:  { name: "Boomerang", icon: "🌀", d: ["", "Throws a returning blade", "More damage", "+1 blade", "Bigger blades", "+1 blade"] },
+  blade: { name: "Rift Blade", icon: "⚔️", d: ["", "Rare boost: launches a spinning blade forward, leaving each enemy hit at 25% health"] },
 };
 const PDEF = {
   might:  { name: "Might", icon: "💪", d: "+18% damage" },
@@ -142,8 +143,8 @@ const CATALOG = [
   { name: "Moss", title: "the Slimecaller", role: "attack", color: "#8cf08c", hat: "#245c2a", kind: "slimecaller", ab: "Slime Summon", d: "Summons friendly slimes that attack nearby foes and focus the Slime King" },
 ];
 const UNLOCK_LV = { Atlas: 0, Lumen: 0, Ember: 0, Vex: 2, Bruno: 3, Frost: 4, Prism: 5, Sage: 6, Orbi: 8, Chrono: 10, Nyx: 12, Rocky: 14, Rad: 15, Gale: 17, Volt: 19, Mystic: 21, Lucky: 24, Moss: 9 };
-CATALOG.forEach(c => { c.lv = UNLOCK_LV[c.name] | 0; });
-const isUnlocked = c => acctInfo().lvl >= c.lv;
+CATALOG.forEach(c => { c.lv = UNLOCK_LV[c.name] | 0; c.cost = 0; });
+const isUnlocked = c => !!(acct.wizards && acct.wizards[c.name]) || acctInfo().lvl >= (c.lv || 0);
 const DIFFS = [
   { id: "easy", name: "Easy", icon: "🌱", color: "#6bf0b0", hp: 0.65, spd: 0.88, dmg: 0.55, spawn: 0.7, xp: 1.3, med: 1.5, boss: 0.65, elite: 0, cap: 200, safe: 0.7, sz: 1.2, d: "A relaxed run. Fewer, softer slimes." },
   { id: "normal", name: "Normal", icon: "⚔️", color: "#ffd23f", hp: 1, spd: 1, dmg: 1, spawn: 1, xp: 1, med: 1, boss: 1, elite: 0, cap: 260, safe: 1, sz: 1, d: "The intended experience." },
@@ -154,12 +155,13 @@ const DIFFS = [
 const FILTERS = [["all", "All", "All"], ["attack", "⚔", "⚔ Attack"], ["tank", "🛡", "🛡 Tank"], ["heal", "💚", "💚 Heal"], ["support", "🌀", "🌀 Support"], ["buff", "✨", "✨ Buff"]];
 const ROLE_COL = { attack: "#ff8a6a", tank: "#7ab8ff", heal: "#8cf08c", support: "#6fe0d0", buff: "#f09aff" };
 let WIN_TIME = 300, PACE = 1.47;
-const RARE_WEAPON_CHANCE = { meteor: 0.05, flame: 0.12, boom: 0.12, knives: 0.12 };
+const RARE_WEAPON_CHANCE = { meteor: 0.05, flame: 0.12, boom: 0.12, knives: 0.12, blade: 0.025 };
 const ORB_COL = ["#2fa8ff", "#ff3a4a", "#ffd23f"], ORB_NAME = ["Blue", "Red", "Yellow"], ORB_CHANCE = [0.05, 0.075, 0.10], COWBOY_BULLET = 0.5;
 const BASE_SLOTS = 2, MAX_COMP = 5, KINGS_NEEDED = 3;
 
 /* ================= state ================= */
 let state = "menu", paused = false, hero = HEROES[0];
+let autoKingReady = false;
 let time = 0, kills = 0, P, E, S, ES, G, PT, TX, FX, RN, banner, boss, shake, hitStop, FS = [];
 let wl = {}, pl = {}, cd = {}, freeze = 0, selMain = 0, selComp = [], menuDrag = null, medT = 5, recruitPending = 0, CP = [];
 let level, xp, xpNeed, pending, choices = [], levelTitle = "LEVEL UP!";
@@ -171,9 +173,22 @@ let diffIdx = 1, DF = DIFFS[1], run = { absorbed: 0, healed: 0 }, endNote = "", 
 const menuS = { s: 0, max: 0 }, grids = { cat: { s: 0, max: 0 }, rec: { s: 0, max: 0 } };
 let uiLock = false, catFilter = "all", recChoices = [], recAll = false;
 try { const bb = JSON.parse(localStorage.getItem("slimesiege_best3") || "{}"); if (bb && typeof bb === "object") bests = bb; } catch (e) {}
-let acct = { xp: 0, up: {}, wiz: {} };
-let selectedWizardUpgrade = "Atlas";
-try { const aa = JSON.parse(localStorage.getItem("slimesiege_acct") || "null"); if (aa && aa.xp > 0) acct.xp = aa.xp; if (aa && aa.up) acct.up = aa.up; if (aa && aa.wiz) acct.wiz = aa.wiz; } catch (e) {}
+let acct = { xp: 0, up: {}, wiz: {}, slimency: 0, orbProgress: 0, shop: {}, wizards: { Atlas: true } };
+let selectedWizardUpgrade = "Atlas", upgradeTab = "stats", settingsReturnState = "menu";
+let settings = { autoKing: false, fov: 1 };
+try { const ss = JSON.parse(localStorage.getItem("slimesiege_settings") || "null"); if (ss) settings = { autoKing: !!ss.autoKing, fov: clamp(Number(ss.fov) || 1, 0.75, 1.3) }; } catch (e) {}
+function saveSettings() { try { localStorage.setItem("slimesiege_settings", JSON.stringify(settings)); } catch (e) {} }
+function wizardCost(c) { return 0; }
+function buyWizard(c) {
+  if (isUnlocked(c)) return true;
+  if (acctInfo().lvl < c.lv) { if (state === "play" && TX) addText(P?.x || 0, (P?.y || 0) - 25, "Unlock at Level " + c.lv, "#ff9a9a", 14); beep(150, 0.15, "square", 0.05); return false; }
+  acct.wizards[c.name] = true; saveAcct(); beep(720, 0.12, "triangle", 0.06); return true;
+}
+try { const aa = JSON.parse(localStorage.getItem("slimesiege_acct") || "null"); if (aa && aa.xp > 0) acct.xp = aa.xp; if (aa && aa.up) acct.up = aa.up; if (aa && aa.wiz) acct.wiz = aa.wiz; if (aa && Number.isFinite(aa.slimency)) acct.slimency = aa.slimency; if (aa && Number.isFinite(aa.orbProgress)) acct.orbProgress = aa.orbProgress; if (aa && aa.shop) acct.shop = aa.shop; if (aa && aa.wizards) acct.wizards = aa.wizards; } catch (e) {}
+if (!acct.wizards || typeof acct.wizards !== "object") acct.wizards = { Atlas: true };
+if (!Object.keys(acct.wizards).length) acct.wizards.Atlas = true;
+if (!acct.wizards.Atlas) acct.wizards.Atlas = true;
+acct.slimency = Math.max(0, Number(acct.slimency) || 0); acct.orbProgress = clamp(Number(acct.orbProgress) || 0, 0, 99.99); if (!acct.shop || typeof acct.shop !== "object") acct.shop = {};
 const lvNeed = l => 120 + 60 * l;
 function acctInfo(xp = acct.xp) { let l = 0, r = xp; while (r >= lvNeed(l) && l < 99) { r -= lvNeed(l); l++; } return { lvl: l, cur: Math.floor(r), need: lvNeed(l) }; }
 function slots() { return Math.min(MAX_COMP, BASE_SLOTS + Math.floor(acctInfo().lvl / 10)); }
@@ -192,9 +207,9 @@ const UPS = [
   { id: "luck", name: "Luck", icon: "🍀", d: "+15% king-orb chance and boosts rare upgrade odds per rank" },
 ];
 const upRank = id => (acct.up && acct.up[id]) | 0;
-const upCost = r => r < 5 ? 1 : 2;
+const upCost = r => 5 + r * 5;
 function upSpent() { let t = 0; for (const u of UPS) for (let r = 0; r < upRank(u.id); r++) t += upCost(r); return t; }
-const upPoints = () => acctInfo().lvl - upSpent();
+const upPoints = () => acct.slimency;
 function wizardRanks(name) { if (!acct.wiz[name]) acct.wiz[name] = { power: 0, haste: 0, vitality: 0 }; return acct.wiz[name]; }
 const WIZ_UPS = [
   { id: "power", name: "Power", icon: "⚔️", desc: "+12% ability damage per rank" },
@@ -202,12 +217,18 @@ const WIZ_UPS = [
   { id: "vitality", name: "Vitality", icon: "💚", desc: "+12% healing, summon duration and toughness per rank" },
 ];
 function wizardSpent(name) { const r = wizardRanks(name); return WIZ_UPS.reduce((n, u) => n + r[u.id], 0); }
-function wizardPoints(name) { return acctInfo().lvl - wizardSpent(name); }
-function buyWizardUp(name, id) { const r = wizardRanks(name); if (r[id] >= 5 || wizardPoints(name) <= 0) { beep(160, 0.15, "square", 0.05); return; } r[id]++; saveAcct(); beep(700 + r[id] * 60, 0.1, "triangle", 0.06); }
+function wizardUpgradeCost(rank) { return 5 + rank * 5; }
+function buyWizardUp(name, id) {
+  const r = wizardRanks(name), cost = wizardUpgradeCost(r[id] || 0);
+  if (!isUnlocked(CATALOG.find(c => c.name === name)) || r[id] >= 5 || acct.slimency < cost) { beep(160, 0.15, "square", 0.05); return; }
+  acct.slimency -= cost; r[id]++; saveAcct(); beep(700 + r[id] * 60, 0.1, "triangle", 0.06);
+}
 function wPower(c, n) { return n * (1 + 0.12 * (wizardRanks(c.def.name).power || 0)); }
 function wVitality(c) { return 1 + 0.12 * (wizardRanks(c.def.name).vitality || 0); }
 function saveAcct() { try { localStorage.setItem("slimesiege_acct", JSON.stringify(acct)); } catch (e) {} }
-function buyUp(id) { const r = upRank(id); if (r >= 10 || upPoints() < upCost(r)) { beep(160, 0.15, "square", 0.05); return; } acct.up[id] = r + 1; saveAcct(); beep(700 + r * 60, 0.1, "triangle", 0.06); beep(1000 + r * 60, 0.1, "triangle", 0.05, 0, 0.07); }
+function buyUp(id) { const r = upRank(id), cost = upCost(r); if (r >= 10 || acct.slimency < cost) { beep(160, 0.15, "square", 0.05); return; } acct.slimency -= cost; acct.up[id] = r + 1; saveAcct(); beep(700 + r * 60, 0.1, "triangle", 0.06); beep(1000 + r * 60, 0.1, "triangle", 0.05, 0, 0.07); }
+function refundUpgrades() { let refund = 0; for (const u of UPS) for (let r = 0; r < upRank(u.id); r++) refund += upCost(r); acct.up = {}; acct.slimency += refund; saveAcct(); beep(300, 0.15, "sine", 0.05, 100); }
+function collectOrbCurrency(value) { const v = Math.max(0, Number(value) || 0); acct.orbProgress += v; const got = Math.floor(acct.orbProgress / 100); if (got > 0) { acct.orbProgress -= got * 100; acct.slimency += got; if (run) run.orbs = (run.orbs || 0) + got; addText(P.x, P.y - 48, "+" + got + " ORB" + (got > 1 ? "S" : ""), "#ffd23f", 14); } saveAcct(); }
 function resetUps() { acct.up = {}; saveAcct(); beep(300, 0.15, "sine", 0.05, 100); }
 function stageUnlocked(st) { return st <= 1 || [0, 1, 2, 3, 4].every(d => (bests[bkey(d, st - 1, false)] || {}).w); }
 function bkey(i = diffIdx, st = stage, en = endless) { const b = st === 1 ? DIFFS[i].id : DIFFS[i].id + "_s" + st; return en ? "inf_" + b : b; }
@@ -225,8 +246,8 @@ function stat() {
 }
 
 function startGame(h) {
-  hero = h; audio(); DF = makeDF(diffIdx, stage); orbHeld = [false, false, false]; lastGain = null; PD = []; cowboysKilled = 0; run = { absorbed: 0, healed: 0 }; endNote = "";
-  wl = { [h.w]: 1 }; pl = {}; cd = { bolt: 0.3, zap: 0.5, nova: 2, boom: 1, knives: 0.4, meteor: 10 }; FZ = []; MT = []; fT = 0; RAD = []; MS = null; flashT = 0; sprintTog = false;
+  hero = h; audio(); DF = makeDF(diffIdx, stage); orbHeld = [false, false, false]; lastGain = null; PD = []; cowboysKilled = 0; run = { absorbed: 0, healed: 0, orbs: 0 }; endNote = "";
+  wl = { [h.w]: 1 }; for (const id of Object.keys(acct.shop || {})) if (acct.shop[id] && WDEF[id]) wl[id] = Math.max(wl[id] || 0, 1); pl = {}; cd = { bolt: 0.3, zap: 0.5, nova: 2, boom: 1, knives: 0.4, meteor: 0 }; FZ = []; MT = []; fT = 0; RAD = []; MS = null; flashT = 0; sprintTog = false;
   P = { x: 0, y: 0, hp: stat().maxhp, stam: stat().stamMax, exh: false, stR: 0, sprint: false, rdCD: 0, inv: 0, face: 1, fx: 0, fy: 1, moving: false, hurt: 0, abCD: 0, dfCD: 0, dfT: 0, storm: 0, stormT: 0, shieldT: 0 }; freeze = 0;
   E = []; S = []; ES = []; G = []; PT = []; TX = []; FX = []; RN = []; FS = [];
   time = 0; kills = 0; level = 1; xp = 0; xpNeed = 5; pending = 0; boss = null; shake = 0; hitStop = 0;
@@ -248,7 +269,8 @@ function startFromMenu() {
 }
 function toggleComp(name) {
   const cc = CATALOG.find(q => q.name === name);
-  if (!cc || !isUnlocked(cc)) { beep(160, 0.15, "square", 0.05); return; }
+  if (!cc) { beep(160, 0.15, "square", 0.05); return; }
+  if (!isUnlocked(cc)) { if (buyWizard(cc)) toggleComp(name); return; }
   const i = selComp.indexOf(name);
   if (i >= 0) selComp.splice(i, 1); else { selComp.push(name); if (selComp.length > slots()) selComp.shift(); }
   beep(660, 0.06, "triangle", 0.05);
@@ -259,6 +281,15 @@ function spawnEnemy(type, x, y, extra) {
   const d = EDEF[type], hpm = 1 + time * PACE / 150;
   const e = { type, x, y, r: d.r, hp: d.hp * hpm * DF.hp, sp: d.sp * (1 + time * PACE / 900) * DF.spd, dmg: d.dmg, xp: d.xp,
     flash: 0, kx: 0, ky: 0, t: rnd(0, 6), cd: rnd(1, 2.2), orbCD: 0, boomCD: 0, dead: false };
+  if (type !== "boss" && type !== "cowboy" && type !== "spiderling") {
+    const traitChance = Math.min(0.48, 0.12 + (DF.stage - 1) * 0.08 + diffIdx * 0.025 + time / 1800);
+    if (Math.random() < traitChance) {
+      e.trait = pick(["invisible", "armored", "berserk", "swift"]);
+      if (e.trait === "armored") e.hp *= 1.5;
+      if (e.trait === "berserk") e.dmg *= 1.5;
+      if (e.trait === "swift") e.sp *= 1.3;
+    }
+  }
   if (type !== "boss" && type !== "cowboy" && type !== "spiderling" && DF.elite && time > 25 && Math.random() < DF.elite) { e.elite = true; e.hp *= 3; e.r *= 1.3; e.xp *= 3; e.dmg *= 1.25; }
   if (type === "charger") { e.st = "walk"; e.stt = rnd(1.5, 3); e.dx = 0; e.dy = 0; }
   if (type === "imp") { e.stt = rnd(1.5, 3); e.volley = 0; }
@@ -287,7 +318,7 @@ function pickType() {
 function collectKingOrb(c) {
   orbHeld[c] = true; sfx.pickup(); burst(P.x, P.y, 16, ORB_COL[c], 150, 0.6); beep(700 + c * 250, 0.2, "triangle", 0.06, 300);
   const n = orbHeld.filter(Boolean).length;
-  if (n >= 3) banner = { text: "🔮 ALL 3 ORBS READY — PRESS K OR SUMMON KING!", life: 3.2, color: "#ffe14a" };
+  if (n >= 3) banner = { text: settings.autoKing ? "🔮 ALL 3 ORBS READY — THE KING IS SUMMONING!" : "🔮 ALL 3 ORBS READY — PRESS K OR SUMMON KING!", life: 3.2, color: "#ffe14a" };
   else banner = { text: "🔮 " + ORB_NAME[c] + " orb collected (" + n + " / 3)", life: 1.8, color: ORB_COL[c] };
 }
 function summonKing() {
@@ -331,7 +362,7 @@ function recordRun(win) {
   const mult = 1 + 0.15 * diffIdx + 0.3 * (stage - 1) + (endless ? 0.1 : 0);
   const gain = Math.round((kills * 0.6 + time * 0.8 + kingsKilled * 60 + cowboysKilled * 120 + (win ? 200 : 0)) * mult);
   const before = acctInfo(), sl0 = slots(); acct.xp += gain; const after = acctInfo();
-  lastGain = { unlocked: CATALOG.filter(c => c.lv > before.lvl && c.lv <= after.lvl).map(c => c.name), gain, lvl: after.lvl, pts: after.lvl - before.lvl, up: after.lvl > before.lvl, slotUp: slots() > sl0, slots: slots() };
+  lastGain = { unlocked: [], gain, orbs: run.orbs || 0, lvl: after.lvl, pts: after.lvl - before.lvl, up: after.lvl > before.lvl, slotUp: slots() > sl0, slots: slots() };
   try { localStorage.setItem("slimesiege_best3", JSON.stringify(bests)); localStorage.setItem("slimesiege_acct", JSON.stringify(acct)); } catch (e) {}
 }
 function quitRun() { if (state === "play" && endless && time > 5) { state = "over"; recordRun(false); paused = false; overT = 0; return; } toMenu(); }
@@ -548,10 +579,7 @@ function updateWeapons(dt) {
   }
   FZ = FZ.filter(f => f.life > 0);
   // Meteor storm
-  if (wl.meteor) {
-    cd.meteor -= dt;
-    if (cd.meteor <= 0 && !MS) { MS = { x: px + rnd(-140, 140), y: py + rnd(-140, 140), t: 0, L: wl.meteor, hit: false, on: 0, tk: 0, tk2: 1 }; cd.meteor = 30; banner = { text: "☄ METEOR INCOMING!", life: 2, color: "#ff8a5a" }; sfx.boss(); }
-  }
+  if (wl.meteor) cd.meteor = Math.max(0, (cd.meteor || 0) - dt);
   if (MS) {
     const m = MS; m.t += dt; m.L = wl.meteor || m.L;
     if (!m.hit && m.t >= 1.8) { m.hit = true; m.on = 15; splash(m.x, m.y, 250 + 30 * m.L, 110 + 40 * m.L, "255,80,40"); burst(m.x, m.y, 44, "#ff9a3a", 340, 0.9); shake = 30; flashT = 0.9; hitStop = 0.1; banner = { text: "🔥 THE SKY BURNS!", life: 2.2, color: "#ff6a4a" }; sfx.boom(); }
@@ -560,6 +588,17 @@ function updateWeapons(dt) {
       if (m.tk <= 0) { m.tk = 0.5; for (const e of E) { if (e.dead) continue; const big = e.type === "boss" || e.type === "cowboy"; dmgEnemy(e, big ? e.maxhp * 0.004 : 4 + 3 * m.L, 0, 0, 0, big); } }
       if (m.tk2 <= 0) { m.tk2 = 1; if (!(P.inv > 0)) { P.hp = Math.max(1, P.hp - st.maxhp * 0.012); P.hurt = 0.12; addText(P.x, P.y - 30, "🔥", "#ff8a4a", 14); } for (const c of CP) if (c.def.kind === "tank" && c.hp > 3) c.hp -= 3; }
       if (m.on <= 0) MS = null;
+    }
+  }
+  // Rare Rift Blade: one forward pass, each target can only be struck once.
+  if (wl.blade) {
+    cd.blade = (cd.blade === undefined ? 5 : cd.blade) - dt;
+    if (cd.blade <= 0) {
+      let an = Math.atan2(P.fy || 0, P.fx || 1);
+      if (usingMouse) an = Math.atan2(pointer.y - H / 2, pointer.x - W / 2);
+      else { const t = nearest(px, py, 650); if (t) an = Math.atan2(t.y - py, t.x - px); }
+      S.push({ k: "blade", x: px + Math.cos(an) * 28, y: py + Math.sin(an) * 28, vx: Math.cos(an) * 760, vy: Math.sin(an) * 760, life: 1.35, r: 25, spin: 0, hit: new Set() });
+      cd.blade = 18; beep(260, 0.18, "sawtooth", 0.06, 500); burst(px, py, 12, "#8feaff", 160, 0.4);
     }
   }
   // Orbit
@@ -590,6 +629,11 @@ function orbList() {
   const n = [0, 2, 3, 3, 4, 5][L], rad = 62 + 7 * L + (L >= 3 ? 8 : 0), sp = 2.6 + 0.35 * L, or = 11 + (L >= 3 ? 3 : 0), out = [];
   for (let i = 0; i < n; i++) { const a = time * sp + i * TAU / n; out.push({ x: P.x + Math.cos(a) * rad, y: P.y + Math.sin(a) * rad, r: or }); }
   return out;
+}
+function triggerMeteor() {
+  if (!P || state !== "play" || paused || !wl.meteor || MS || (cd.meteor || 0) > 0) { if (state === "play" && wl.meteor && cd.meteor > 0) addText(P.x, P.y - 38, "Meteor ready in " + Math.ceil(cd.meteor) + "s", "#ffb080", 13); return; }
+  MS = { x: P.x + rnd(-140, 140), y: P.y + rnd(-140, 140), t: 0, L: wl.meteor, hit: false, on: 0, tk: 0, tk2: 1 };
+  cd.meteor = 30; banner = { text: "☄ METEOR INCOMING!", life: 2, color: "#ff8a5a" }; sfx.boss();
 }
 function meltdown(who) {
   if (!P || state !== "play" || paused || P.rdCD > 0) return;
@@ -768,7 +812,7 @@ function updateCompanions(dt) {
         if (tg) {
           c.mode = "grab"; const dx = tg.x - c.x, dy = tg.y - c.y, d = Math.hypot(dx, dy) || 1, stp = Math.min(d, 430 * dt);
           c.x += dx / d * stp; c.y += dy / d * stp;
-          if (d < 20) { tg.taken = true; xp += tg.v * 1.4 * DF.xp * (hasComp("Lucky") ? 1.25 : 1); burst(tg.x, tg.y, 4, "#ff9bd8", 90, 0.35); gemCombo++; gemComboT = 0.4; }
+          if (d < 20) { tg.taken = true; xp += tg.v * 1.4 * DF.xp * (hasComp("Lucky") ? 1.25 : 1); collectOrbCurrency(1); burst(tg.x, tg.y, 4, "#ff9bd8", 90, 0.35); gemCombo++; gemComboT = 0.4; }
         } else if (c.mode === "grab") c.mode = "follow";
         break; }
       case "reactor": break; // Activated manually with R
@@ -867,7 +911,7 @@ function recruit(def) {
 function openLevel() {
   const pool = [];
   for (const id in WDEF) {
-    if ((wl[id] || 0) >= 5) continue;
+    if ((wl[id] || 0) >= (id === "blade" ? 1 : 5)) continue;
     // Special weapons are rare; Luck raises their appearance chance without changing ordinary upgrades.
     const rareChance = RARE_WEAPON_CHANCE[id];
     if (rareChance && !wl[id] && Math.random() > Math.min(0.85, rareChance * (1 + 0.75 * upRank("luck")))) continue;
@@ -896,6 +940,7 @@ function applyChoice(c) {
 function update(dt) {
   if (hitStop > 0) { hitStop -= dt; return; }
   time += dt;
+  if (settings.autoKing && orbHeld.every(Boolean) && !(boss && !boss.dead)) summonKing();
   const st = stat();
   if (shake > 0) shake = Math.max(0, shake - dt * 28);
   if (banner && (banner.life -= dt) <= 0) banner = null;
@@ -1095,6 +1140,17 @@ function update(dt) {
           if (s.pierce-- <= 0) { s.life = 0; break; }
         }
       }
+    } else if (s.k === "blade") {
+      s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt; s.spin += dt * 24;
+      for (const e of E) {
+        if (e.dead || s.hit.has(e)) continue;
+        if (Math.hypot(e.x - s.x, e.y - s.y) < e.r + s.r) {
+          s.hit.add(e); const floorHp = e.maxhp * 0.25;
+          if (e.hp > floorHp) e.hp = floorHp;
+          e.flash = 0.12; burst(e.x, e.y, 12, "#8feaff", 180, 0.45);
+          addText(e.x, e.y - e.r - 12, "25% REMAINING", "#8feaff", 12); sfx.hit();
+        }
+      }
     } else if (s.k === "fire") {
       s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
       if (Math.random() < 0.7 && PT.length < 600) PT.push({ x: s.x, y: s.y, vx: rnd(-20, 20), vy: rnd(-20, 20), life: 0.3, max: 0.3, color: "#ffa53a", sz: 4 });
@@ -1150,7 +1206,7 @@ function update(dt) {
     if (g.pull || d < st.magnet) { g.pull = true; const sp = 380 + (g.age = (g.age || 0) + dt) * 900; g.x += dx / d * sp * dt; g.y += dy / d * sp * dt; }
     if (d < 20) {
       g.taken = true;
-      if (g.t === "gem") { xp += g.v * 1.4 * DF.xp * (hasComp("Lucky") ? 1.25 : 1); gemCombo++; gemComboT = 0.4; sfx.gem(gemCombo); }
+      if (g.t === "gem") { xp += g.v * 1.4 * DF.xp * (hasComp("Lucky") ? 1.25 : 1); collectOrbCurrency(1); gemCombo++; gemComboT = 0.4; sfx.gem(gemCombo); }
       else if (g.t === "kingorb") collectKingOrb(g.c);
       else if (g.t === "heart") { P.hp = Math.min(st.maxhp, P.hp + 30); addText(P.x, P.y - 30, "+30 HP", "#ff8aa0", 16); sfx.pickup(); }
       else if (g.t === "magnet") { for (const o of G) o.pull = true; banner = { text: "MAGNET!", life: 1.2, color: "#7fd0ff" }; sfx.pickup(); }
@@ -1203,9 +1259,11 @@ function eyes(x, y, sp, ex, ey, look, big) {
 }
 function drawEnemy(e) {
   const x = e.x, y = e.y, r = e.r, sq = Math.sin(e.t * 6) * 0.1, fl = e.flash > 0;
-  shadow(x, y + r * 0.8, r * 0.9);
+  if (e.trait === "invisible") ctx.globalAlpha = 0.12 + 0.18 * Math.abs(Math.sin(e.t * 2.4));
+  shadow(x, y + r * 0.8, r * 0.9); ctx.globalAlpha = 1;
   if (e.elite) { ctx.strokeStyle = "rgba(255,70,70," + (0.6 + 0.3 * Math.sin(e.t * 8)) + ")"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, r + 5 + Math.sin(e.t * 8), 0, TAU); ctx.stroke(); ctx.fillStyle = "rgba(255,60,60,.12)"; ctx.fill(); }
   ctx.save();
+  if (e.trait === "invisible") ctx.globalAlpha = 0.14 + 0.24 * Math.abs(Math.sin(e.t * 2.4));
   switch (e.type) {
     case "slime": {
       ctx.fillStyle = fl ? "#fff" : "#5fd35f"; ctx.beginPath(); ctx.ellipse(x, y, r * (1 + sq), r * (0.9 - sq), 0, 0, TAU); ctx.fill();
@@ -1363,6 +1421,10 @@ function drawEnemy(e) {
       break; }
   }
   ctx.restore();
+  if (e.trait && e.trait !== "invisible") {
+    const tag = e.trait === "armored" ? "🛡" : e.trait === "berserk" ? "⚔" : "➤";
+    ctx.font = "11px " + FONT; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = e.trait === "armored" ? "#9fcaff" : e.trait === "berserk" ? "#ff8a8a" : "#ffe08a"; ctx.fillText(tag, x, y - r - 16);
+  } else if (e.trait === "invisible" && Math.sin(e.t * 2.4) > 0.65) { ctx.font = "10px " + FONT; ctx.fillStyle = "#c9d7ff"; ctx.textAlign = "center"; ctx.fillText("GHOSTED", x, y - r - 12); }
   if (e.type !== "boss" && e.type !== "cowboy" && e.hp < e.maxhp && e.type !== "bat" && e.type !== "spiderling") {
     ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(x - r, y - r - 9, r * 2, 4);
     ctx.fillStyle = "#ff5a6e"; ctx.fillRect(x - r, y - r - 9, r * 2 * Math.max(0, e.hp / e.maxhp), 4);
@@ -1426,8 +1488,14 @@ function drawPlayer() {
     const L = wl2, n = [0, 2, 3, 3, 4, 5][L], rad = 62 + 7 * L + (L >= 3 ? 8 : 0), sp = 2.6 + 0.35 * L;
     for (let i = 0; i < n; i++) {
       const a = time * sp + i * TAU / n, ox = x + Math.cos(a) * rad, oy = y + Math.sin(a) * rad, or = 11 + (L >= 3 ? 3 : 0);
-      const gr = ctx.createRadialGradient(ox, oy, 1, ox, oy, or + 6); gr.addColorStop(0, "#fff"); gr.addColorStop(0.5, "#6fe0ff"); gr.addColorStop(1, "rgba(80,180,255,0)");
-      ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(ox, oy, or + 6, 0, TAU); ctx.fill();
+      if (acct.shop && acct.shop.orbit) {
+        ctx.save(); ctx.translate(ox, oy); ctx.rotate(a + Math.PI / 2); ctx.shadowColor = "#9feaff"; ctx.shadowBlur = 12;
+        ctx.fillStyle = "#dcefff"; ctx.beginPath(); ctx.moveTo(0, -17); ctx.lineTo(5, 7); ctx.lineTo(0, 4); ctx.lineTo(-5, 7); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#5b7895"; ctx.fillRect(-2, 5, 4, 8); ctx.restore();
+      } else {
+        const gr = ctx.createRadialGradient(ox, oy, 1, ox, oy, or + 6); gr.addColorStop(0, "#fff"); gr.addColorStop(0.5, "#6fe0ff"); gr.addColorStop(1, "rgba(80,180,255,0)");
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(ox, oy, or + 6, 0, TAU); ctx.fill();
+      }
     }
   }
   ctx.fillStyle = P.hurt > 0 ? "#fff" : hero.color; ctx.beginPath(); ctx.arc(x, y + bob - 2, 15, 0, TAU); ctx.fill();
@@ -1507,6 +1575,7 @@ function drawWorld() {
   for (const s of S) {
     if (s.k === "bolt" && s.knife) { const an = Math.atan2(s.vy, s.vx); ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(an); ctx.fillStyle = "rgba(200,230,255,.3)"; ctx.fillRect(-16, -3, 14, 6); ctx.fillStyle = "#eaf6ff"; ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-5, -4); ctx.lineTo(-5, 4); ctx.closePath(); ctx.fill(); ctx.fillStyle = "#8a6a4a"; ctx.fillRect(-10, -2, 5, 4); ctx.restore(); }
     else if (s.k === "bolt") { ctx.fillStyle = s.glow || "rgba(160,120,255,.35)"; ctx.beginPath(); ctx.arc(s.x, s.y, 11, 0, TAU); ctx.fill(); ctx.fillStyle = s.col || "#fff"; ctx.beginPath(); ctx.arc(s.x, s.y, 5, 0, TAU); ctx.fill(); }
+    else if (s.k === "blade") { ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.spin); ctx.shadowColor = "#72e8ff"; ctx.shadowBlur = 18; ctx.fillStyle = "#dffaff"; ctx.strokeStyle = "#4ccfff"; ctx.lineWidth = 4; ctx.beginPath(); for (let i = 0; i < 8; i++) { const a = i * TAU / 8, rr = i % 2 ? s.r * 0.35 : s.r * 1.35; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore(); }
     else if (s.k === "fire") { ctx.fillStyle = "rgba(255,120,40,.35)"; ctx.beginPath(); ctx.arc(s.x, s.y, 14, 0, TAU); ctx.fill(); ctx.fillStyle = "#ffb04a"; ctx.beginPath(); ctx.arc(s.x, s.y, 8, 0, TAU); ctx.fill(); ctx.fillStyle = "#fff3b0"; ctx.beginPath(); ctx.arc(s.x, s.y, 4, 0, TAU); ctx.fill(); }
     else { ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.spin); ctx.fillStyle = "#e8f4ff"; ctx.strokeStyle = "#6fb4ff"; ctx.lineWidth = 3;
       ctx.beginPath(); for (let i = 0; i < 3; i++) { const a = i * TAU / 3; ctx.lineTo(Math.cos(a) * s.r * 1.4, Math.sin(a) * s.r * 1.4); ctx.lineTo(Math.cos(a + TAU / 6) * s.r * 0.35, Math.sin(a + TAU / 6) * s.r * 0.35); }
@@ -1535,6 +1604,9 @@ function panel(x, y, w, h, fill = "rgba(15,22,32,.88)", stroke = "#6a8ca8") {
 }
 function drawHUD() {
   const st = stat();
+  txt(VERSION, W - 12, 18, 11, "#9fb4c6", "right", 700);
+  txt("🔮 " + acct.slimency + " · " + Math.floor(acct.orbProgress) + "/100", W - 12, 56, 11, "#ffd23f", "right", 700);
+  panel(12, 190, 38, 38, "rgba(15,22,32,.88)", "#6fd0ff"); txt("⚙", 31, 209, 22, "#6fd0ff"); addRect(12, 190, 38, 38, openSettings);
   ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.fillRect(0, 0, W, 14);
   ctx.fillStyle = "#58e0a0"; ctx.fillRect(0, 0, W * clamp(xp / xpNeed, 0, 1), 14);
   txt("LV " + level, 10, 7, 11, "#fff", "left");
@@ -1562,7 +1634,7 @@ function drawHUD() {
   txt("🤠🕷 Boss " + (cowboyDead ? "✔" : "—"), W / 2 + 66, 64, 13, scol, "center", 700); }
   let hint = "";
   if (boss && !boss.dead) hint = "☠ Slay the Slime King!";
-  else if (orbHeld.every(Boolean)) hint = "🔮 All 3 orbs collected — summon your Slime King!";
+  else if (orbHeld.every(Boolean)) hint = settings.autoKing ? "🔮 All 3 orbs collected — Slime King auto-summoning" : "🔮 All 3 orbs collected — summon your Slime King!";
   else if (!cowboyDead && cowboySpawned) hint = "🤠 Slay the Cowboy Spider!";
   else if (kingsKilled < KINGS_NEEDED) hint = "🔮 Collect 3 king orbs (" + orbHeld.filter(Boolean).length + "/3) to summon the next King";
   else if (!cowboyDead) hint = "🤠 The Cowboy Spider is next!";
@@ -1582,6 +1654,24 @@ function drawHUD() {
   panel(sbx, sby, sbw, sbh, summonReady ? "rgba(95,160,90,.95)" : "rgba(15,22,32,.72)", summonReady ? "#baff9a" : "#587064");
   txt(summonReady ? "👑 SUMMON KING [K]" : "👑 SUMMON " + orbHeld.filter(Boolean).length + "/3", sbx + sbw / 2, sby + sbh / 2, 11, summonReady ? "#fff" : "#8da69a");
   rects.push({ x: sbx, y: sby, w: sbw, h: sbh, fn: summonKing });
+  // Manual special-ability controls: these stay visible in the HUD and mirror R / M.
+  const actionY = H - 112, actionW = Math.min(124, Math.max(92, (W - 42) / 2)), actionH = 30;
+  let actionX = 14;
+  if (hasComp("Rad")) {
+    const radReady = !paused && P.rdCD <= 0 && P.hp >= 6;
+    const radLabel = paused ? "☢ RAD [R]" : P.rdCD > 0 ? "☢ RAD " + Math.ceil(P.rdCD) + "s" : P.hp < 6 ? "☢ LOW HP" : "☢ RAD [R]";
+    panel(actionX, actionY, actionW, actionH, radReady ? "rgba(92,145,48,.95)" : "rgba(15,22,32,.82)", radReady ? "#c6ff8a" : "#71845d");
+    txt(radLabel, actionX + actionW / 2, actionY + actionH / 2, 11, radReady ? "#fff" : "#a8bb9a", "center", 700);
+    rects.push({ x: actionX, y: actionY, w: actionW, h: actionH, fn: () => meltdown("Rad") });
+    actionX += actionW + 8;
+  }
+  if (wl.meteor) {
+    const meteorReady = !paused && !MS && (cd.meteor || 0) <= 0;
+    const meteorLabel = paused ? "☄ METEOR [M]" : MS ? "☄ INCOMING..." : (cd.meteor || 0) > 0 ? "☄ METEOR " + Math.ceil(cd.meteor) + "s" : "☄ METEOR [M]";
+    panel(actionX, actionY, actionW, actionH, meteorReady ? "rgba(157,76,39,.96)" : "rgba(15,22,32,.82)", meteorReady ? "#ffb17a" : "#9a725f");
+    txt(meteorLabel, actionX + actionW / 2, actionY + actionH / 2, 11, meteorReady ? "#fff" : "#c9a99a", "center", 700);
+    rects.push({ x: actionX, y: actionY, w: actionW, h: actionH, fn: triggerMeteor });
+  }
   if (SZ.length) txt("🛡 Safe zone " + Math.ceil(SZ[0].life) + "s", 14, 154, 12, "#9fe6ff", "left", 700);
   if (time < 9) { ctx.globalAlpha = clamp(9 - time, 0, 1);
     const hint1 = usingTouch ? "Drag anywhere to move  ·  tap the round buttons" : "WASD / arrows to move  ·  aim with the mouse" + (wl.knives ? " (knives)" : "");
@@ -1742,7 +1832,7 @@ function drawCatCard(c, x, y, w, h, hov, order) {
   wrapText(c.d, x + 9, yy + 68, w - 18, 12, 10.5, "left");
   txt(c.role.toUpperCase(), x + w - 9, yy + h - 11, 9, ROLE_COL[c.role] || "#9fb4c6", "right", 800);
   if (sel) txt("✔ " + (order + 1), x + w - 20, yy + 14, 12, "#ffd23f");
-  if (!isUnlocked(c)) { panel(x, yy, w, h, "rgba(8,12,18,.97)", "#4a5560"); txt("🔒 " + c.name, x + w / 2, yy + h / 2 - 12, 15, "#8a96a3"); txt("Unlocks at Wizard Level " + c.lv, x + w / 2, yy + h / 2 + 10, 11, "#c9a8ff", "center", 700); }
+  if (!isUnlocked(c)) { panel(x, yy, w, h, "rgba(8,12,18,.94)", "#4a5560"); txt("🔒 " + c.name, x + w / 2, yy + h / 2 - 12, 14, "#ffd23f"); txt("Unlock at Level " + c.lv, x + w / 2, yy + h / 2 + 10, 11, "#ffb0b8", "center", 700); }
 }
 function drawCatGrid(id, list, x, top, w, bot, pickFn, orderFn) {
   const g = grids[id], gap = 10, cols = clamp(Math.floor((w + gap) / (190 + gap)), 2, 4);
@@ -1813,7 +1903,7 @@ function drawCompanionScreen() {
   ctx.fillStyle = "rgba(5,10,18,.92)"; ctx.fillRect(0, 0, W, H);
   const pw = Math.min(W - 20, 960), x0 = W / 2 - pw / 2;
   txt("COMPANIONS", W / 2, 34, clamp(W / 14, 24, 42), "#c9a8ff");
-  txt("Pick up to " + slots() + " (" + selComp.length + " / " + slots() + ").  Level up your wizard to unlock more wizards and slots.", W / 2, 66, clamp(W / 55, 10, 14), "#9fb4c6", "center", 600);
+  txt("🔮 " + acct.slimency + " Orbs  ·  Unlock wizards by levelling, then select up to " + slots() + " owned companions (" + selComp.length + " / " + slots() + ").", W / 2, 66, clamp(W / 55, 10, 14), "#9fb4c6", "center", 600);
   const th = drawTabs(x0, 86, pw), top = 86 + th + 12, bot = H - 70;
   drawCatGrid("cat", catList(CATALOG), x0, top, pw, bot, c => toggleComp(c.name), c => selComp.indexOf(c.name));
   ctx.fillStyle = "rgba(5,10,18,.96)"; ctx.fillRect(0, bot, W, 70);
@@ -1825,6 +1915,7 @@ function drawMenu() {
   uiLock = state === "companions";
   ctx.fillStyle = "rgba(8,14,22,.55)"; ctx.fillRect(0, 0, W, H);
   txt(VERSION, W - 16, 20, 13, "#9fb4c6", "right", 700);
+  panel(12, 10, 42, 42, "rgba(15,22,32,.9)", "#6fd0ff"); txt("⚙", 33, 31, 24, "#6fd0ff"); addRect(12, 10, 42, 42, openSettings);
   const botH = 86, bot = H - botH, colW = Math.min(W - 30, 900), x0 = W / 2 - colW / 2, gap = 12, S = menuS.s;
   const inside = (x, y, w, h) => !uiLock && pointer.y < bot && inRect(x, y - S, w, h);
   const hit = (x, y, w, h, fn) => addRect(x, y - S, w, h, fn, 0, bot);
@@ -1836,16 +1927,14 @@ function drawMenu() {
   txt(endless ? "A King every 2:30; every 3rd King summons the Cowboy Spider." : "To win: slay 3 Slime Kings — the 3rd summons the Cowboy Spider — then slay it.", W / 2, y + 26, clamp(W / 38, 11, 14), "#ffb0b8", "center", 700); y += 46;
   { const ai = acctInfo(), ph2 = 62; panel(x0, y, colW, ph2, "rgba(15,22,32,.9)", "#c9a8ff");
     txt("⭐ Wizard Level " + ai.lvl, x0 + 16, y + 17, 16, "#fff", "left");
-    txt(ai.cur + " / " + ai.need + " XP", x0 + colW - 16, y + 17, 12, "#c9a8ff", "right", 700);
+    txt("🔮 " + acct.slimency + " Orbs", x0 + colW - 16, y + 17, 13, "#ffd23f", "right", 700);
     ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(x0 + 16, y + 28, colW - 32, 9); ctx.fillStyle = "#c9a8ff"; ctx.fillRect(x0 + 16, y + 28, (colW - 32) * clamp(ai.cur / ai.need, 0, 1), 9);
     txt("🧙 " + slots() + " starting companion slot" + (slots() > 1 ? "s" : "") + (slots() < MAX_COMP ? "  ·  next at Level " + (Math.floor(ai.lvl / 10) + 1) * 10 : "  ·  max"), x0 + 16, y + 50, 11, "#9fb4c6", "left", 600);
+    txt(ai.cur + " / " + ai.need + " XP", x0 + colW - 16, y + 50, 11, "#c9a8ff", "right", 700);
     y += ph2 + 8; }
-  { const pts = upPoints(), uh = 40, hv = inside(x0, y, colW, uh); panel(x0, y, colW, uh, hv ? "rgba(34,50,70,.97)" : "rgba(15,22,32,.9)", pts > 0 ? "#ffd23f" : "#3b5268");
-    txt("⬆  Upgrade stats", x0 + 16, y + 21, 15, "#fff", "left"); txt(pts + " point" + (pts === 1 ? "" : "s") + " to spend  ›", x0 + colW - 16, y + 21, 13, pts > 0 ? "#ffd23f" : "#9fb4c6", "right", 700);
-    hit(x0, y, colW, uh, () => { state = "upgrades"; beep(560, 0.08, "triangle", 0.05); }); y += uh + 14; }
-  { const uh = 42, hv = inside(x0, y, colW, uh); panel(x0, y, colW, uh, hv ? "rgba(34,50,70,.97)" : "rgba(15,22,32,.9)", "#c9a8ff");
-    txt("🧙  Upgrade Wizards", x0 + 16, y + 22, 16, "#fff", "left"); txt("Individual stats for every wizard  ›", x0 + colW - 16, y + 22, 12, "#c9a8ff", "right", 700);
-    hit(x0, y, colW, uh, () => { state = "wizardUpgrades"; selectedWizardUpgrade = CATALOG.find(c => isUnlocked(c))?.name || "Atlas"; beep(560, 0.08, "triangle", 0.05); }); y += uh + 14; }
+  { const uh = 42, hv = inside(x0, y, colW, uh); panel(x0, y, colW, uh, hv ? "rgba(34,50,70,.97)" : "rgba(15,22,32,.9)", "#ffd23f");
+    txt("🛒  Permanent Item Shop", x0 + 16, y + 22, 16, "#fff", "left"); txt("Buy starting weapons that stay with every run  ›", x0 + colW - 16, y + 22, 12, "#ffd23f", "right", 700);
+    hit(x0, y, colW, uh, () => { state = "shop"; beep(520, 0.08, "triangle", 0.05); }); y += uh + 8; }
   txt("WIZARD", x0, y + 6, 13, "#ffd23f", "left"); y += 22;
   if (colW >= 600) {
     const cw = (colW - gap * 2) / 3, ch = 210;
@@ -1892,12 +1981,12 @@ function drawMenu() {
   const bh = 64, chov = inside(x0, y, colW, bh);
   panel(x0, y, colW, bh, chov ? "rgba(34,50,70,.97)" : "rgba(15,22,32,.9)", chov ? "#fff" : "#c9a8ff");
   txt("🧙  Choose companions  (" + selComp.length + " / " + slots() + ")", x0 + 18, y + 22, 17, "#fff", "left");
-  txt(selComp.length ? selComp.join("  +  ") : "Allies fight beside you. " + CATALOG.filter(isUnlocked).length + " / " + CATALOG.length + " wizards unlocked", x0 + 18, y + 44, 12, selComp.length ? "#c9a8ff" : "#9fb4c6", "left", 600);
+  txt(selComp.length ? selComp.join("  +  ") : "Unlock allies by levelling up. " + CATALOG.filter(isUnlocked).length + " / " + CATALOG.length + " owned", x0 + 18, y + 44, 12, selComp.length ? "#c9a8ff" : "#9fb4c6", "left", 600);
   selComp.forEach((n, i) => { const c = CATALOG.find(q => q.name === n); if (c) miniWizard(x0 + colW - 70 - i * 40, y + 38, c.color, c.hat, 0.5, 1); });
   txt("›", x0 + colW - 20, y + bh / 2, 30, "#c9a8ff");
   hit(x0, y, colW, bh, () => { state = "companions"; grids.cat.s = 0; beep(560, 0.08, "triangle", 0.05); });
   y += bh + 14;
-  txt(usingTouch ? "Tap to choose  ·  drag to scroll  ·  in a run: drag to move, tap the round buttons" : "Move: WASD / arrows   ·   Aim: mouse   ·   SPACE: ability   ·   SHIFT: sprint   ·   F: deflect   ·   R: Rad meltdown   ·   P: pause   ·   M: mute   ·   ← → difficulty   ·   C: companions   ·   U: upgrades", W / 2, y + 6, clamp(W / 70, 9, 11), "#789", "center", 600);
+  txt(usingTouch ? "Tap to choose  ·  drag to scroll  ·  in a run: drag to move, tap the round buttons" : "Move: WASD / arrows   ·   Aim: mouse   ·   SPACE: ability   ·   SHIFT: sprint   ·   F: deflect   ·   R: Rad meltdown   ·   P: pause   ·   M: meteor if owned / mute   ·   ← → difficulty   ·   C: companions", W / 2, y + 6, clamp(W / 70, 9, 11), "#789", "center", 600);
   y += 26;
   menuS.max = Math.max(0, y - bot + 6); menuS.s = clamp(menuS.s, 0, menuS.max);
   ctx.restore();
@@ -1907,47 +1996,144 @@ function drawMenu() {
   button(W / 2 - bw / 2, bot + 34, bw, 40, "▶  START RUN", startFromMenu, "#6bf0b0", 18, "rgba(40,110,80,.92)");
   if (menuS.max > 0 && !uiLock) txt("scroll ↕", W - 36, bot - 12, 11, "#789", "center", 600);
 }
+function drawUpgradeTabs(x, y, pw) {
+  const gap = 10, bw = (pw - gap) / 2;
+  button(x, y, bw, 38, "PLAYER STATS", () => { upgradeTab = "stats"; }, upgradeTab === "stats" ? "#ffd23f" : "#8294a8", 13);
+  button(x + bw + gap, y, bw, 38, "WIZARD STATS", () => { upgradeTab = "wizards"; }, upgradeTab === "wizards" ? "#c9a8ff" : "#8294a8", 13);
+}
 function drawUpgradeScreen() {
-  uiLock = false;
-  ctx.fillStyle = "rgba(8,14,22,.9)"; ctx.fillRect(0, 0, W, H);
-  const small = H < 470, cols = W >= 760 ? 2 : 1, pw = Math.min(cols === 2 ? 940 : 560, W - 24), x = W / 2 - pw / 2, rh = small ? 54 : 70, colw = cols === 2 ? (pw - 12) / 2 : pw; let y = small ? 6 : Math.max(8, H / 2 - 300);
-  txt("⬆ UPGRADE STATS", W / 2, y + 20, small ? 22 : Math.min(32, W / 12), "#ffd23f");
-  const pts = upPoints(), ai = acctInfo();
-  txt("Wizard Level " + ai.lvl + "  ·  " + pts + " point" + (pts === 1 ? "" : "s") + " to spend  (1 per level)", W / 2, y + (small ? 40 : 54), 13, pts > 0 ? "#fff" : "#9fb4c6", "center", 700); y += small ? 56 : 74; const y00 = y;
-  UPS.forEach((u, ui) => {
-    const col = cols === 2 ? ui % 2 : 0, rx = x + col * (colw + 12), ry = y00 + (cols === 2 ? Math.floor(ui / 2) : ui) * (rh + 6);
-    const r = upRank(u.id), max = r >= 10, c = upCost(r), can = !max && pts >= c;
-    panel(rx, ry, colw, rh, "rgba(15,22,32,.92)", can ? "#ffd23f" : "#3b5268");
-    ctx.font = (small ? 24 : 30) + "px " + FONT; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#fff"; ctx.fillText(u.icon, rx + 30, ry + rh / 2 - 6);
-    txt(u.name + "  ·  Rank " + r + " / 10", rx + 58, ry + 18, 15, "#fff", "left"); txt(u.d, rx + 58, ry + 36, 10.5, "#9fb4c6", "left", 600);
-    for (let i = 0; i < 10; i++) { ctx.fillStyle = i < r ? "#ffd23f" : "rgba(255,255,255,.14)"; ctx.fillRect(rx + 58 + i * 13, ry + rh - 13, 10, 6); }
-    const bw = 84; button(rx + colw - bw - 8, ry + rh / 2 - 19, bw, 38, max ? "MAX" : can ? "+1 (" + c + " pt)" : "(" + c + " pt)", () => buyUp(u.id), max ? "#6bf0b0" : can ? "#ffd23f" : "#6a7886", 13);
-  });
-  y = y00 + Math.ceil(UPS.length / cols) * (rh + 6);
-  y += 4; const bw2 = (pw - 12) / 2;
-  button(x, y, bw2, 44, "↺  Reset (refund)", resetUps, "#ff9a9a", 15); button(x + bw2 + 12, y, bw2, 44, "‹  Back", () => { state = "menu"; beep(520, 0.08, "triangle", 0.05); }, "#6bf0b0", 16);
-  txt("Earn points by levelling your wizard — each run gives XP. Ranks 6–10 cost 2 points.", W / 2, y + 66, 11, "#789", "center", 600);
-}
-function drawWizardUpgradeScreen() {
   uiLock = false; ctx.fillStyle = "rgba(8,14,22,.94)"; ctx.fillRect(0, 0, W, H);
-  const pw = Math.min(760, W - 24), x = W / 2 - pw / 2; let y = 14;
-  txt("Upgrade Wizards", W / 2, y + 24, Math.min(32, W / 12), "#c9a8ff"); y += 54;
-  const unlocked = CATALOG.filter(isUnlocked), cols = W >= 620 ? 3 : 2, gap = 8, bw = (pw - gap * (cols - 1)) / cols, bh = 42;
-  unlocked.forEach((c, i) => { const xx = x + (i % cols) * (bw + gap), yy = y + Math.floor(i / cols) * (bh + gap), sel = selectedWizardUpgrade === c.name;
-    panel(xx, yy, bw, bh, sel ? "rgba(201,168,255,.22)" : "rgba(15,22,32,.92)", sel ? "#c9a8ff" : "#3b5268");
-    txt(c.name, xx + bw / 2, yy + 22, Math.min(15, bw / 7), sel ? "#fff" : c.color); addRect(xx, yy, bw, bh, () => { selectedWizardUpgrade = c.name; });
-  });
-  y += Math.ceil(unlocked.length / cols) * (bh + gap) + 12;
-  const c = CATALOG.find(q => q.name === selectedWizardUpgrade) || unlocked[0], ranks = wizardRanks(c.name), pts = wizardPoints(c.name);
-  miniWizard(W / 2, y + 24, c.color, c.hat, 0.8, 1); txt(c.name + " the " + c.title, W / 2, y + 62, 18, c.color); txt(pts + " individual upgrade point" + (pts === 1 ? "" : "s") + " available", W / 2, y + 84, 12, pts > 0 ? "#ffd23f" : "#9fb4c6"); y += 102;
-  WIZ_UPS.forEach((u, i) => { const ry = y + i * 68, r = ranks[u.id], can = r < 5 && pts > 0, rh = 58;
-    panel(x, ry, pw, rh, "rgba(15,22,32,.94)", can ? "#c9a8ff" : "#3b5268");
-    txt(u.icon + "  " + u.name + "  ·  Rank " + r + " / 5", x + 16, ry + 19, 15, "#fff", "left"); txt(u.desc, x + 16, ry + 40, 11, "#9fb4c6", "left");
-    button(x + pw - 112, ry + 10, 98, 38, r >= 5 ? "MAX" : can ? "+1 point" : "Locked", () => buyWizardUp(c.name, u.id), can ? "#c9a8ff" : "#667381", 12);
-  });
-  const by = Math.min(H - 54, y + WIZ_UPS.length * 68 + 8); button(W / 2 - 100, by, 200, 40, "‹  Back", () => { state = "menu"; beep(520, 0.08, "triangle", 0.05); }, "#6bf0b0", 15);
-  if (H < by + 48) txt("Scroll to see all wizard upgrades", W / 2, H - 8, 10, "#789");
+  const pw = Math.min(760, W - 24), x = W / 2 - pw / 2;
+  txt("UPGRADE WORKSHOP", W / 2, 32, Math.min(30, W / 12), "#ffd23f");
+  txt("🔮 " + acct.slimency + " Orbs  ·  Collect 100 gem value to earn 1 Orb", W / 2, 56, 12, "#9fb4c6");
+  drawUpgradeTabs(x, 72, pw);
+  if (upgradeTab === "stats") {
+    const small = H < 570, rh = small ? 58 : 70, gap = 6, top = 122;
+    UPS.forEach((u, i) => {
+      const ry = top + i * (rh + gap), r = upRank(u.id), cost = upCost(r), can = r < 10 && acct.slimency >= cost;
+      panel(x, ry, pw, rh, "rgba(15,22,32,.94)", can ? "#ffd23f" : "#3b5268");
+      ctx.font = "27px " + FONT; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#fff"; ctx.fillText(u.icon, x + 28, ry + rh / 2 - 4);
+      txt(u.name + "  ·  Rank " + r + " / 10", x + 56, ry + 18, 15, "#fff", "left"); txt(u.d, x + 56, ry + 38, 10.5, "#9fb4c6", "left", 600);
+      for (let j = 0; j < 10; j++) { ctx.fillStyle = j < r ? "#ffd23f" : "rgba(255,255,255,.14)"; ctx.fillRect(x + 56 + j * 13, ry + rh - 12, 10, 5); }
+      button(x + pw - 112, ry + rh / 2 - 18, 98, 36, r >= 10 ? "MAX" : "🔮 " + cost, () => buyUp(u.id), can ? "#ffd23f" : "#6a7886", 12);
+    });
+    const by = top + UPS.length * (rh + gap) + 6;
+    button(x, by, (pw - 12) / 2, 40, "↺  Refund stat upgrades", refundUpgrades, "#ff9a9a", 12);
+    button(x + (pw + 12) / 2, by, (pw - 12) / 2, 40, "‹  Back to Settings", backToSettings, "#6bf0b0", 13);
+  } else {
+    let y = 124; const unlocked = CATALOG.filter(isUnlocked), cols = W >= 620 ? 5 : 3, gap = 7, bw = (pw - gap * (cols - 1)) / cols, bh = 36;
+    unlocked.forEach((c, i) => { const xx = x + (i % cols) * (bw + gap), yy = y + Math.floor(i / cols) * (bh + gap), sel = selectedWizardUpgrade === c.name;
+      panel(xx, yy, bw, bh, sel ? "rgba(201,168,255,.22)" : "rgba(15,22,32,.92)", sel ? "#c9a8ff" : "#3b5268");
+      txt(c.name, xx + bw / 2, yy + 19, Math.min(13, bw / 7), sel ? "#fff" : c.color); addRect(xx, yy, bw, bh, () => { selectedWizardUpgrade = c.name; });
+    });
+    y += Math.ceil(unlocked.length / cols) * (bh + gap) + 10;
+    const c = CATALOG.find(q => q.name === selectedWizardUpgrade && isUnlocked(q)) || unlocked[0], ranks = wizardRanks(c.name);
+    miniWizard(W / 2, y + 18, c.color, c.hat, 0.58, 1); txt(c.name + " the " + c.title, W / 2, y + 48, 15, c.color); y += 62;
+    WIZ_UPS.forEach(u => { const r = ranks[u.id], cost = wizardUpgradeCost(r), can = r < 5 && acct.slimency >= cost, rh = 52;
+      panel(x, y, pw, rh, "rgba(15,22,32,.94)", can ? "#c9a8ff" : "#3b5268");
+      txt(u.icon + "  " + u.name + "  ·  Rank " + r + " / 5", x + 14, y + 17, 14, "#fff", "left"); txt(u.desc, x + 14, y + 37, 10, "#9fb4c6", "left");
+      button(x + pw - 108, y + 8, 94, 36, r >= 5 ? "MAX" : "🔮 " + cost, () => buyWizardUp(c.name, u.id), can ? "#c9a8ff" : "#6a7886", 12); y += rh + 6;
+    });
+    button(x, Math.min(H - 48, y + 2), pw, 38, "‹  Back to Settings", backToSettings, "#6bf0b0", 13);
+    if (y + 46 > H) txt("Scroll the page to see all wizard upgrades", W / 2, H - 6, 10, "#789");
+  }
 }
+function drawWizardUpgradeScreen() { upgradeTab = "wizards"; drawUpgradeScreen(); }
+
+const SHOP_ITEMS = [
+  { id: "orbit", name: "Orbiting Blades", icon: "🗡️", cost: 8, desc: "A ring of spinning knives protects you" },
+  { id: "bolt", name: "Magic Bolt", icon: "✨", cost: 5, desc: "Fire magical bolts at nearby enemies" },
+  { id: "zap", name: "Lightning", icon: "⚡", cost: 8, desc: "Strike enemies with lightning" },
+  { id: "nova", name: "Shock Nova", icon: "💥", cost: 10, desc: "Pulse blasts around you" },
+  { id: "knives", name: "Throwing Knives", icon: "🔪", cost: 12, desc: "Throw piercing knives forward" },
+  { id: "boom", name: "Boomerang", icon: "🌀", cost: 14, desc: "Launch returning blades" },
+  { id: "flame", name: "Flame Trail", icon: "🔥", cost: 16, desc: "Leave a damaging fire trail" },
+  { id: "meteor", name: "Meteor Storm", icon: "☄️", cost: 20, desc: "Press M to call down a meteor" },
+];
+function buyShopItem(item) {
+  if (acct.shop[item.id]) return;
+  if (acct.slimency < item.cost) { beep(150, 0.15, "square", 0.05); return; }
+  acct.slimency -= item.cost; acct.shop[item.id] = true; saveAcct(); beep(760, 0.14, "triangle", 0.06);
+}
+function openSettings() {
+  settingsReturnState = state === "play" ? "play" : "menu";
+  if (settingsReturnState === "play") paused = true;
+  state = "settings";
+}
+function closeSettings() {
+  state = settingsReturnState || "menu";
+  if (state === "play") paused = true;
+}
+function backToSettings() { state = "settings"; }
+
+function drawSettingsScreen() {
+  uiLock = false; ctx.fillStyle = "rgba(8,14,22,.94)"; ctx.fillRect(0, 0, W, H);
+  const pw = Math.min(620, W - 28), x = W / 2 - pw / 2; let y = Math.max(18, H / 2 - 190);
+  txt("SETTINGS", W / 2, y + 24, 32, "#6fd0ff"); y += 62;
+  button(x, y, pw, 42, "⬆  UPGRADE WORKSHOP  ·  Stats + wizard upgrades", () => { upgradeTab = "stats"; selectedWizardUpgrade = CATALOG.find(c => isUnlocked(c))?.name || "Atlas"; state = "upgrades"; }, "#ffd23f", 13); y += 54;
+  panel(x, y, pw, 66, "rgba(15,22,32,.95)", "#6fd0ff");
+  txt("Auto-spawn Slime Kings", x + 18, y + 22, 16, "#fff", "left");
+  txt(settings.autoKing ? "ON · summon when all 3 orbs are collected" : "OFF · press K to summon manually", x + 18, y + 46, 11, "#9fb4c6", "left");
+  button(x + pw - 116, y + 14, 98, 38, settings.autoKing ? "ON" : "OFF", () => { settings.autoKing = !settings.autoKing; saveSettings(); }, settings.autoKing ? "#6bf0b0" : "#6a7886", 14); y += 80;
+  panel(x, y, pw, 76, "rgba(15,22,32,.95)", "#6fd0ff");
+  txt("Field of View / Zoom", x + 18, y + 22, 16, "#fff", "left"); txt(Math.round(settings.fov * 100) + "%", x + pw - 18, y + 22, 14, "#6fd0ff", "right");
+  button(x + 18, y + 36, 54, 32, "−", () => { settings.fov = clamp(Math.round((settings.fov - 0.05) * 100) / 100, 0.75, 1.3); saveSettings(); }, "#6fd0ff", 18);
+  button(x + 82, y + 36, 54, 32, "+", () => { settings.fov = clamp(Math.round((settings.fov + 0.05) * 100) / 100, 0.75, 1.3); saveSettings(); }, "#6fd0ff", 18);
+  button(x + 146, y + 36, 90, 32, "Reset FOV", () => { settings.fov = 1; saveSettings(); }, "#9fb4c6", 11); y += 90;
+  const resetOpen = !!(bests[bkey(2, 3, false)] || {}).w;
+  if (resetOpen) {
+    panel(x, y, pw, 58, "rgba(35,12,18,.94)", "#ff7b8a");
+    txt("Full reset unlocked", x + 18, y + 20, 14, "#fff", "left");
+    txt("Clear all progress, currency, upgrades and settings", x + 18, y + 40, 10, "#ffb0b8", "left");
+    button(x + pw - 142, y + 10, 124, 38, "RESET EVERYTHING", () => { state = "resetConfirm1"; }, "#ff7b8a", 10); y += 70;
+  } else {
+    panel(x, y, pw, 50, "rgba(15,22,32,.8)", "#3b5268");
+    txt("Full reset unlocks after clearing Stage 3 · Hard", W / 2, y + 25, 12, "#9fb4c6"); y += 62;
+  }
+  panel(x, y, pw, 88, "rgba(15,22,32,.95)", "#3b5268");
+  txt("CHANGELOG · v1.52", x + 16, y + 18, 13, "#ffd23f", "left");
+  txt("• Rare Rift Blade · manual Meteor (M) · enemy mutations", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
+  txt("• Orb currency: 1 Orb per 100 gem drops collected", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
+  txt("• Upgrade Workshop and permanent starting-item shop", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600); y += 98;
+  button(W / 2 - 100, Math.min(H - 52, y + 4), 200, 40, "‹  Back", closeSettings, "#6bf0b0", 15);
+}
+function drawShopScreen() {
+  uiLock = false; ctx.fillStyle = "rgba(8,14,22,.95)"; ctx.fillRect(0, 0, W, H);
+  const pw = Math.min(760, W - 24), x = W / 2 - pw / 2;
+  txt("PERMANENT ITEM SHOP", W / 2, 34, Math.min(30, W / 12), "#ffd23f");
+  txt("🔮 " + acct.slimency + " Orbs  ·  Purchased items start every run at Level 1", W / 2, 60, 12, "#9fb4c6");
+  const cols = W >= 620 ? 2 : 1, gap = 10, cw = (pw - gap * (cols - 1)) / cols, ch = 76, top = 84;
+  SHOP_ITEMS.forEach((it, i) => {
+    const xx = x + (i % cols) * (cw + gap), yy = top + Math.floor(i / cols) * (ch + gap), owned = !!acct.shop[it.id], can = acct.slimency >= it.cost;
+    panel(xx, yy, cw, ch, owned ? "rgba(45,80,65,.92)" : "rgba(15,22,32,.94)", owned ? "#6bf0b0" : can ? "#ffd23f" : "#3b5268");
+    txt(it.icon + "  " + it.name, xx + 14, yy + 22, 15, "#fff", "left"); txt(it.desc, xx + 14, yy + 47, 10.5, "#9fb4c6", "left");
+    button(xx + cw - 112, yy + 19, 98, 38, owned ? "OWNED" : "🔮 " + it.cost, () => buyShopItem(it), owned ? "#6bf0b0" : can ? "#ffd23f" : "#6a7886", 12);
+  });
+  const by = top + Math.ceil(SHOP_ITEMS.length / cols) * (ch + gap) + 8;
+  button(W / 2 - 110, Math.min(H - 50, by), 220, 40, "‹  Back to Menu", () => { state = "menu"; }, "#6bf0b0", 14);
+}
+
+function drawResetConfirm(stageNo) {
+  uiLock = false; ctx.fillStyle = "rgba(10,3,8,.96)"; ctx.fillRect(0, 0, W, H);
+  const pw = Math.min(520, W - 30), x = W / 2 - pw / 2, y = H / 2 - 130;
+  panel(x, y, pw, 260, "rgba(28,12,18,.98)", "#ff6a7a");
+  txt(stageNo === 1 ? "ARE YOU SURE?" : "FINAL CONFIRMATION", W / 2, y + 42, 29, "#ff7b8a");
+  if (stageNo === 1) {
+    txt("This will erase your Orbs, shop items, wizard upgrades, XP,", W / 2, y + 94, 13, "#fff");
+    txt("upgrades, stage clears and saved settings.", W / 2, y + 118, 13, "#fff");
+    txt("You cannot undo this.", W / 2, y + 150, 14, "#ffd23f");
+    button(x + 24, y + 190, (pw - 60) / 2, 44, "Continue", () => { state = "resetConfirm2"; }, "#ff7b8a", 14);
+    button(x + 36 + (pw - 60) / 2, y + 190, (pw - 60) / 2, 44, "Cancel", () => { state = "settings"; }, "#6bf0b0", 14);
+  } else {
+    txt("Last chance. All saved game progress will be lost.", W / 2, y + 100, 13, "#fff");
+    button(x + 24, y + 180, (pw - 60) / 2, 44, "YES, RESET ALL", () => {
+      try { ["slimesiege_acct", "slimesiege_best3", "slimesiege_best", "slimesiege_sel", "slimesiege_settings"].forEach(k => localStorage.removeItem(k)); } catch (e) {}
+      acct = { xp: 0, up: {}, wiz: {}, slimency: 0, orbProgress: 0, shop: {}, wizards: { Atlas: true } }; bests = {}; best = 0; selComp = []; selMain = 0; stage = 1; diffIdx = 1; endless = false; settings = { autoKing: false, fov: 1 }; saveAcct(); saveSettings(); state = "menu"; menuS.s = 0;
+    }, "#ff5368", 13);
+    button(x + 36 + (pw - 60) / 2, y + 180, (pw - 60) / 2, 44, "CANCEL", () => { state = "settings"; }, "#6bf0b0", 14);
+  }
+}
+
 function drawPause() {
   uiLock = false;
   ctx.fillStyle = "rgba(5,10,18,.7)"; ctx.fillRect(0, 0, W, H);
@@ -1963,10 +2149,19 @@ function drawPause() {
 function drawEnd(win) {
   uiLock = false;
   ctx.fillStyle = win ? "rgba(255,230,120,.12)" : "rgba(80,0,10,.38)"; ctx.fillRect(0, 0, W, H);
+  if (win) {
+    const tier = Math.max(1, stage), cx0 = W / 2, cy0 = H / 2, t = overT, col = ["#6bf0b0", "#9c8bff", "#ffd23f"][Math.min(2, tier - 1)];
+    const fade = clamp(t / 1.2, 0, 1), ring = 70 + t * (95 + tier * 24);
+    ctx.save(); ctx.globalAlpha = (1 - clamp(t / 7, 0, 0.7)) * 0.65;
+    for (let k = 0; k < 2 + tier; k++) { ctx.strokeStyle = col; ctx.lineWidth = 2 + tier; ctx.beginPath(); ctx.arc(cx0, cy0, ring + k * (22 + tier * 9), t * (0.6 + k * 0.12) * (k % 2 ? -1 : 1), t * (0.6 + k * 0.12) * (k % 2 ? -1 : 1) + Math.PI * (1.2 + tier * 0.18)); ctx.stroke(); }
+    const rays = 12 + tier * 12; for (let i = 0; i < rays; i++) { const a = i / rays * TAU + t * 0.18, r1 = 70 + (i % 3) * 8, r2 = ring + 80 + (i % 4) * 12; ctx.strokeStyle = col; ctx.globalAlpha = (0.08 + 0.1 * Math.sin(t * 3 + i)) * fade; ctx.lineWidth = 1 + tier; ctx.beginPath(); ctx.moveTo(cx0 + Math.cos(a) * r1, cy0 + Math.sin(a) * r1); ctx.lineTo(cx0 + Math.cos(a) * r2, cy0 + Math.sin(a) * r2); ctx.stroke(); }
+    ctx.globalAlpha = 0.16 * fade; const rg = ctx.createRadialGradient(cx0, cy0, 5, cx0, cy0, ring + 90); rg.addColorStop(0, col); rg.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
   const pw = Math.min(500, W - 24), ph = 620, cx = W / 2, x = cx - pw / 2, y = Math.max(8, H / 2 - ph / 2);
   panel(x, y, pw, ph);
-  txt(win ? "VICTORY!" : endless ? "♾ RUN OVER" : "YOU WERE SLIMED", cx, y + 42, Math.min(42, pw / 11), win ? "#ffd23f" : "#ff5a6e");
-  txt(DF.icon + " " + DF.name, cx, y + 78, 16, DF.color);
+  txt(win ? "STAGE " + stage + " CLEARED" : endless ? "♾ RUN OVER" : "YOU WERE SLIMED", cx, y + 42, Math.min(38, pw / 12), win ? (stage === 1 ? "#6bf0b0" : stage === 2 ? "#b7a5ff" : "#ffd23f") : "#ff5a6e");
+  txt(win ? "✦  VICTORY  ✦  " + DF.icon + " " + DF.name : DF.icon + " " + DF.name, cx, y + 78, 16, DF.color);
   let ly = y + 114;
   const L = (a, b, col = "#fff") => { txt(a, x + 40, ly, 17, "#9fb4c6", "left", 600); txt(b, x + pw - 40, ly, 20, col, "right"); ly += 30; };
   L("Time", endless ? fmt(time) : fmt(time) + " / " + fmt(WIN_TIME)); L("Slain", String(kills));
@@ -1976,11 +2171,12 @@ function drawEnd(win) {
   if (run.healed > 0) L("Healed by Lumen", String(Math.round(run.healed)), "#fff2a0");
   if (lastGain) {
     L("Wizard XP", "+" + lastGain.gain, "#c9a8ff");
+    L("Orbs earned", "+" + (lastGain.orbs || 0), "#ffd23f");
     const ai = acctInfo(); txt("⭐ Wizard Level " + ai.lvl + "  (" + ai.cur + " / " + ai.need + ")", cx, ly + 4, 15, "#fff");
     ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(x + 40, ly + 18, pw - 80, 8); ctx.fillStyle = "#c9a8ff"; ctx.fillRect(x + 40, ly + 18, (pw - 80) * clamp(ai.cur / ai.need, 0, 1), 8); ly += 38;
     if (lastGain.slotUp) { txt("🧙 +1 STARTING COMPANION SLOT!  (" + lastGain.slots + " now)", cx, ly + 4, 15, "#6bf0b0"); ly += 24; }
     if (lastGain.unlocked.length) { txt("🔓 New wizard" + (lastGain.unlocked.length > 1 ? "s" : "") + " unlocked: " + lastGain.unlocked.join(", "), cx, ly + 4, 15, "#9fe6ff"); ly += 24; }
-    if (lastGain.up) { txt("LEVEL UP!  +" + lastGain.pts + " upgrade point" + (lastGain.pts > 1 ? "s" : "") + "  (" + upPoints() + " to spend)", cx, ly + 4, 15, "#ffd23f"); ly += 24; }
+    if (lastGain.up) { txt("LEVEL UP!  Wizard level " + lastGain.lvl, cx, ly + 4, 15, "#ffd23f"); ly += 24; }
   }
   if (endNote) txt(endNote, cx, ly + 10, 18, "#ffd23f");
   if (overT > 0.8) { const bw = (pw - 90) / 2, by = y + ph - 62; button(x + 30, by, bw, 44, "▶  Play again", startFromMenu, "#6bf0b0"); button(x + 60 + bw, by, bw, 44, "☰  Menu", toMenu, "#9fb4c6"); }
@@ -1989,16 +2185,17 @@ function drawEnd(win) {
 function render() {
   ctx.fillStyle = "#2b4a3a"; ctx.fillRect(0, 0, W, H);
   rects = []; uiLock = false;
-  const inMenu = state === "menu" || state === "companions" || state === "upgrades" || state === "wizardUpgrades";
+  const inMenu = ["menu", "companions", "upgrades", "wizardUpgrades", "settings", "shop", "resetConfirm1", "resetConfirm2"].includes(state);
   if (inMenu) { camX = Math.cos(menuT * 0.3) * 300; camY = Math.sin(menuT * 0.25) * 300; }
   else if (P) { camX = P.x; camY = P.y; }
   ctx.save();
   const sx = shake > 0 ? rnd(-shake, shake) * 0.6 : 0, sy = shake > 0 ? rnd(-shake, shake) * 0.6 : 0;
   ctx.translate(Math.round(W / 2 - camX + sx), Math.round(H / 2 - camY + sy));
+  if (!inMenu) ctx.scale(settings.fov, settings.fov);
   if (inMenu) drawGround(); else drawWorld();
   ctx.restore();
   if (freeze > 0 && !inMenu) { ctx.fillStyle = `rgba(90,170,255,${0.12 + 0.05 * Math.sin(time * 10)})`; ctx.fillRect(0, 0, W, H); }
-  if (inMenu) { if (state === "companions") drawCompanionScreen(); else if (state === "upgrades") drawUpgradeScreen(); else if (state === "wizardUpgrades") drawWizardUpgradeScreen(); else drawMenu(); }
+  if (inMenu) { if (state === "companions") drawCompanionScreen(); else if (state === "upgrades" || state === "wizardUpgrades") drawUpgradeScreen(); else if (state === "settings") drawSettingsScreen(); else if (state === "shop") drawShopScreen(); else if (state === "resetConfirm1") drawResetConfirm(1); else if (state === "resetConfirm2") drawResetConfirm(2); else drawMenu(); }
   else {
     drawScreenFx(); drawHUD(); drawAbility(); drawDeflectBtn(); drawSprintBtn(); drawCrosshair(); drawCompHud(); drawMedArrows(); drawZoneArrows();
     if (state === "level") drawLevel();
@@ -2023,11 +2220,12 @@ addEventListener("keydown", e => {
   audio();
   if (!e.repeat) {
     const c = e.code, dm = /^(?:Digit|Numpad)(\d)$/.exec(c), num = dm ? parseInt(dm[1], 10) : 0;
-    if (c === "KeyM") muted = !muted;
+    if (c === "KeyM" && !(state === "play" && wl.meteor)) muted = !muted;
     if (state === "play") {
       if (c === "Space" && !paused) useAbility();
       if (c === "KeyF" && !paused) deflect();
       if (c === "KeyR" && !paused && hasComp("Rad")) meltdown("Rad");
+      if (c === "KeyM" && !paused && wl.meteor) triggerMeteor();
       if (c === "KeyK" && !paused) summonKing();
       if (c === "KeyP" || c === "Escape") paused = !paused;
     } else if (state === "menu") {
@@ -2035,10 +2233,16 @@ addEventListener("keydown", e => {
       if (c === "ArrowLeft") diffIdx = Math.max(0, diffIdx - 1);
       if (c === "ArrowRight") diffIdx = Math.min(DIFFS.length - 1, diffIdx + 1);
       if (c === "KeyC") { state = "companions"; grids.cat.s = 0; }
-      if (c === "KeyU") state = "upgrades";
+      
       if (c === "Enter" || c === "Space") startFromMenu();
     } else if (state === "upgrades" || state === "wizardUpgrades") {
-      if (c === "Escape" || c === "Enter" || c === "KeyU") state = "menu";
+      if (c === "Escape" || c === "Enter" || c === "KeyU") backToSettings();
+    } else if (state === "settings") {
+      if (c === "Escape" || c === "Enter") closeSettings();
+    } else if (state === "shop") {
+      if (c === "Escape" || c === "Enter") state = "menu";
+    } else if (state === "resetConfirm1" || state === "resetConfirm2") {
+      if (c === "Escape") state = "settings";
     } else if (state === "companions") {
       if (c === "Escape" || c === "Enter" || c === "Space" || c === "KeyC") closeCompanions();
     } else if (state === "level") {
@@ -2063,7 +2267,7 @@ cv.addEventListener("pointermove", e => {
 cv.addEventListener("pointerdown", e => {
   audio(); pointer.x = e.clientX; pointer.y = e.clientY;
   usingMouse = e.pointerType === "mouse"; if (!usingMouse) usingTouch = true; else usingTouch = false;
-  if (state === "upgrades" || state === "wizardUpgrades") { clickRects(); return; }
+  if (state === "upgrades" || state === "wizardUpgrades" || state === "settings" || state === "shop" || state === "resetConfirm1" || state === "resetConfirm2") { clickRects(); return; }
   if (state === "menu" || state === "companions" || state === "recruit") { const so = scrollObj(); menuDrag = { y: e.clientY, s: so ? so.s : 0, moved: false, so }; return; }
   if (state === "level") { clickRects(); return; }
   if (state === "over" || state === "win") { if (overT > 0.8) clickRects(); return; }
