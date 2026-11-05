@@ -18,7 +18,7 @@
 <script>
 (() => {
 "use strict";
-const VERSION = "v1.53"; // Removes former blade projectiles; replaces them with magical orbs
+const VERSION = "v1.54"; // Arcane weapon uses throwing knives; Orbiting Orbs remain unchanged
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -92,7 +92,7 @@ const WDEF = {
   orbit: { name: "Orbit Orbs", icon: "🔮", d: ["", "Orbs circle and smack foes", "+1 orb", "Bigger, faster orbs", "+1 orb", "+1 orb"] },
   zap:   { name: "Lightning", icon: "⚡", d: ["", "Strikes a random foe", "+1 strike", "Strikes more often", "+1 strike", "+1 strike"] },
   nova:  { name: "Shock Nova", icon: "💥", d: ["", "Pulse blasts nearby foes", "Bigger pulse", "Faster pulses", "More damage", "Huge pulse"] },
-  arcane: { name: "Arcane Orbs", icon: "🔮", d: ["", "Launches glowing orbs in a fan", "+1 orb", "Orbs launch faster", "+1 orb, more damage", "+2 orbs"] },
+  arcane: { name: "Throwing Knives", icon: "🗡️", d: ["", "Throws a fan of sharp knives", "+1 knife", "Knives launch faster", "+1 knife, more damage", "+2 knives"] },
   flame: { name: "Flame Trail", icon: "🔥", d: ["", "Leave burning fire behind you", "Bigger, longer fire", "Burns harder", "Fire lasts longer", "Inferno trail"] },
   meteor: { name: "Meteor Storm", icon: "☄️", d: ["", "Every 30s a meteor hits — the sky burns red for 15s, hurting everything", "Harder crash & burn", "Bigger crater", "Burns even hotter", "Apocalypse"] },
   boom:  { name: "Boomerang", icon: "🌀", d: ["", "Throws a returning blade", "More damage", "+1 blade", "Bigger blades", "+1 blade"] },
@@ -557,7 +557,7 @@ function updateWeapons(dt) {
       } else cd.boom = 0.2;
     }
   }
-  // Arcane Orbs
+  // Throwing Knives (the only knife-based weapon)
   if (wl.arcane) {
     cd.arcane -= dt * st.haste;
     if (cd.arcane <= 0) {
@@ -565,7 +565,7 @@ function updateWeapons(dt) {
       let base = Math.atan2(P.fy, P.fx);
       if (usingMouse) base = Math.atan2(pointer.y - H / 2, pointer.x - W / 2);
       else { const tg = nearest(px, py, 560); if (tg) base = Math.atan2(tg.y - py, tg.x - px); }
-      for (let i = 0; i < n; i++) { const a = base + (i - (n - 1) / 2) * 0.14; S.push({ k: "bolt", arcaneOrb: true, x: px, y: py, vx: Math.cos(a) * 720, vy: Math.sin(a) * 720, life: 0.8, dmg: 8 + 3 * L + (L >= 4 ? 4 : 0), pierce: 3, hit: new Set(), r: 9, col: "#b8f5ff", glow: "rgba(80,210,255,.55)" }); }
+      for (let i = 0; i < n; i++) { const a = base + (i - (n - 1) / 2) * 0.14; S.push({ k: "arcaneKnife", x: px, y: py, vx: Math.cos(a) * 720, vy: Math.sin(a) * 720, life: 0.8, dmg: 8 + 3 * L + (L >= 4 ? 4 : 0), pierce: 3, hit: new Set(), r: 9, spin: Math.atan2(Math.sin(a), Math.cos(a)) }); }
       sfx.shoot(); cd.arcane = 1.15 - 0.1 * L;
     }
   }
@@ -1122,7 +1122,7 @@ function update(dt) {
 
   // player shots
   for (const s of S) {
-    if (s.k === "bolt") {
+    if (s.k === "bolt" || s.k === "arcaneKnife") {
       if (s.home) {
         const tg = nearest(s.x, s.y, 420);
         if (tg) {
@@ -1578,7 +1578,7 @@ function drawWorld() {
   }
   if (state !== "menu") { drawCompanions(); drawPlayer(); drawPlayerFx(); }
   for (const s of S) {
-    if (s.k === "bolt" && s.arcaneOrb) { const pulse = 1 + Math.sin(time * 16 + s.x * 0.03) * 0.12; ctx.save(); ctx.shadowColor = "#57dcff"; ctx.shadowBlur = 18; ctx.fillStyle = "rgba(70,210,255,.24)"; ctx.beginPath(); ctx.arc(s.x, s.y, 15 * pulse, 0, TAU); ctx.fill(); const g = ctx.createRadialGradient(s.x - 3, s.y - 3, 1, s.x, s.y, 10 * pulse); g.addColorStop(0, "#fff"); g.addColorStop(.35, "#c9fbff"); g.addColorStop(1, "#36bce8"); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(s.x, s.y, 9 * pulse, 0, TAU); ctx.fill(); ctx.shadowBlur = 0; ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.beginPath(); ctx.arc(s.x - 3, s.y - 3, 2.2, 0, TAU); ctx.fill(); ctx.restore(); }
+    if (s.k === "arcaneKnife") { ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(Math.atan2(s.vy, s.vx)); ctx.shadowColor = "#d8e8ff"; ctx.shadowBlur = 8; ctx.fillStyle = "#eaf4ff"; ctx.strokeStyle = "#7899bd"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-5, -4); ctx.lineTo(-2, 0); ctx.lineTo(-5, 4); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle = "#9aa9bb"; ctx.fillRect(-10, -2, 5, 4); ctx.restore(); }
     else if (s.k === "bolt") { ctx.fillStyle = s.glow || "rgba(160,120,255,.35)"; ctx.beginPath(); ctx.arc(s.x, s.y, 11, 0, TAU); ctx.fill(); ctx.fillStyle = s.col || "#fff"; ctx.beginPath(); ctx.arc(s.x, s.y, 5, 0, TAU); ctx.fill(); }
     else if (s.k === "blade") { ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.spin); ctx.shadowColor = "#72e8ff"; ctx.shadowBlur = 18; ctx.fillStyle = "#dffaff"; ctx.strokeStyle = "#4ccfff"; ctx.lineWidth = 4; ctx.beginPath(); for (let i = 0; i < 8; i++) { const a = i * TAU / 8, rr = i % 2 ? s.r * 0.35 : s.r * 1.35; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore(); }
     else if (s.k === "fire") { ctx.fillStyle = "rgba(255,120,40,.35)"; ctx.beginPath(); ctx.arc(s.x, s.y, 14, 0, TAU); ctx.fill(); ctx.fillStyle = "#ffb04a"; ctx.beginPath(); ctx.arc(s.x, s.y, 8, 0, TAU); ctx.fill(); ctx.fillStyle = "#fff3b0"; ctx.beginPath(); ctx.arc(s.x, s.y, 4, 0, TAU); ctx.fill(); }
@@ -1679,8 +1679,8 @@ function drawHUD() {
   }
   if (SZ.length) txt("🛡 Safe zone " + Math.ceil(SZ[0].life) + "s", 14, 154, 12, "#9fe6ff", "left", 700);
   if (time < 9) { ctx.globalAlpha = clamp(9 - time, 0, 1);
-    const hint1 = usingTouch ? "Drag anywhere to move  ·  tap the round buttons" : "WASD / arrows to move  ·  aim with the mouse" + (wl.arcane ? " (orbs)" : "");
-    const hint2 = usingTouch ? (hero.ab ? "Big button: " + hero.ab.name + "  ·  🛡 deflect  ·  🏃 sprint" : "🛡 deflect  ·  🏃 sprint") : (hero.ab ? "SPACE: " + hero.ab.name : "Orbs guard you") + "   SHIFT: sprint   F: deflect";
+    const hint1 = usingTouch ? "Drag anywhere to move  ·  tap the round buttons" : "WASD / arrows to move  ·  aim with the mouse" + (wl.arcane ? " (knives)" : "");
+    const hint2 = usingTouch ? (hero.ab ? "Big button: " + hero.ab.name + "  ·  🛡 deflect  ·  🏃 sprint" : "🛡 deflect  ·  🏃 sprint") : (hero.ab ? "SPACE: " + hero.ab.name : "Your weapons auto-fire") + "   SHIFT: sprint   F: deflect";
     const hy = usingTouch ? H * 0.7 : H - 112; txt(hint1, W / 2, hy, Math.min(16, W / 24), "#fff", "center", 700); txt(hint2, W / 2, hy + 24, Math.min(16, W / 24), "#fff", "center", 700); ctx.globalAlpha = 1; }
   if (state === "play" && !paused) {
     const bx = W - 30, by = 76, hov = pointer.x >= bx - 18 && pointer.x <= bx + 18 && pointer.y >= by - 18 && pointer.y <= by + 18;
@@ -2050,7 +2050,7 @@ const SHOP_ITEMS = [
   { id: "bolt", name: "Magic Bolt", icon: "✨", cost: 5, desc: "Fire magical bolts at nearby enemies" },
   { id: "zap", name: "Lightning", icon: "⚡", cost: 8, desc: "Strike enemies with lightning" },
   { id: "nova", name: "Shock Nova", icon: "💥", cost: 10, desc: "Pulse blasts around you" },
-  { id: "arcane", name: "Arcane Orbs", icon: "🔮", cost: 12, desc: "Launch piercing magical orbs forward" },
+  { id: "arcane", name: "Throwing Knives", icon: "🗡️", cost: 12, desc: "Throw a fan of piercing knives forward" },
   { id: "boom", name: "Boomerang", icon: "🌀", cost: 14, desc: "Launch returning blades" },
   { id: "flame", name: "Flame Trail", icon: "🔥", cost: 16, desc: "Leave a damaging fire trail" },
   { id: "meteor", name: "Meteor Storm", icon: "☄️", cost: 20, desc: "Press M to call down a meteor" },
@@ -2096,9 +2096,9 @@ function drawSettingsScreen() {
     txt("Full reset unlocks after clearing Stage 3 · Hard", W / 2, y + 25, 12, "#9fb4c6"); y += 62;
   }
   panel(x, y, pw, 88, "rgba(15,22,32,.95)", "#3b5268");
-  txt("CHANGELOG · v1.53", x + 16, y + 18, 13, "#ffd23f", "left");
-  txt("• Converted the ranged attacker into a magical orb caster", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
-  txt("• Orbiting Orbs and Arcane Orbs are now the ranged weapon visuals", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
+  txt("CHANGELOG · v1.54", x + 16, y + 18, 13, "#ffd23f", "left");
+  txt("• Changed Arcane Orbs back to Throwing Knives", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
+  txt("• Orbiting Orbs remain unchanged; no other weapons use knives", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
   txt("• Rift Blade, manual Meteor (M), enemy mutations and the Upgrade Workshop", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600); y += 98;
   button(W / 2 - 100, Math.min(H - 52, y + 4), 200, 40, "‹  Back", closeSettings, "#6bf0b0", 15);
 }
