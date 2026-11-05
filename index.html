@@ -18,7 +18,7 @@
 <script>
 (() => {
 "use strict";
-const VERSION = "v1.54"; // Arcane weapon uses throwing knives; Orbiting Orbs remain unchanged
+const VERSION = "v1.55"; // Manual Rift Blade, stage final bosses, ShadowCaster, autosave
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -92,11 +92,11 @@ const WDEF = {
   orbit: { name: "Orbit Orbs", icon: "🔮", d: ["", "Orbs circle and smack foes", "+1 orb", "Bigger, faster orbs", "+1 orb", "+1 orb"] },
   zap:   { name: "Lightning", icon: "⚡", d: ["", "Strikes a random foe", "+1 strike", "Strikes more often", "+1 strike", "+1 strike"] },
   nova:  { name: "Shock Nova", icon: "💥", d: ["", "Pulse blasts nearby foes", "Bigger pulse", "Faster pulses", "More damage", "Huge pulse"] },
-  arcane: { name: "Throwing Knives", icon: "🗡️", d: ["", "Throws a fan of sharp knives", "+1 knife", "Knives launch faster", "+1 knife, more damage", "+2 knives"] },
+  knives: { name: "Throwing Knives", icon: "🗡️", d: ["", "Fan of piercing knives where you move", "+1 knife", "Throws faster", "+1 knife, more damage", "+2 knives"] },
   flame: { name: "Flame Trail", icon: "🔥", d: ["", "Leave burning fire behind you", "Bigger, longer fire", "Burns harder", "Fire lasts longer", "Inferno trail"] },
   meteor: { name: "Meteor Storm", icon: "☄️", d: ["", "Every 30s a meteor hits — the sky burns red for 15s, hurting everything", "Harder crash & burn", "Bigger crater", "Burns even hotter", "Apocalypse"] },
   boom:  { name: "Boomerang", icon: "🌀", d: ["", "Throws a returning blade", "More damage", "+1 blade", "Bigger blades", "+1 blade"] },
-  blade: { name: "Rift Blade", icon: "⚔️", d: ["", "Rare boost: launches a spinning blade forward, leaving each enemy hit at 25% health"] },
+  blade: { name: "Rift Blade", icon: "⚔️", d: ["", "Rare boost: press B (or tap the button) to launch a spinning blade forward, leaving each enemy hit at 25% health"] },
 };
 const PDEF = {
   might:  { name: "Might", icon: "💪", d: "+18% damage" },
@@ -118,9 +118,10 @@ const EDEF = {
   charger:    { hp: 70, sp: 50, dmg: 20, r: 16, xp: 4 },
   imp:        { hp: 22, sp: 70, dmg: 8, r: 10, xp: 3 },
   shaman:     { hp: 45, sp: 48, dmg: 6, r: 13, xp: 5 },
-  orbshooter:     { hp: 28, sp: 66, dmg: 9, r: 12, xp: 3 },
+  knifer:     { hp: 28, sp: 66, dmg: 9, r: 12, xp: 3 },
   spiderling: { hp: 10, sp: 135, dmg: 7, r: 8, xp: 1 },
   cowboy:     { hp: 1, sp: 85, dmg: 26, r: 62, xp: 0 },
+  shadow:     { hp: 1, sp: 92, dmg: 30, r: 52, xp: 0 },
 };
 const CATALOG = [
   { name: "Atlas", title: "the Bulwark", role: "tank", color: "#7ab8ff", hat: "#1c3a6a", kind: "tank", ab: "Aegis", d: "Takes every hit for the party. Falls, then rises again" },
@@ -141,8 +142,9 @@ const CATALOG = [
   { name: "Rad", title: "the Reactor", role: "attack", color: "#b6ff6a", hat: "#2a5a10", kind: "reactor", ab: "Meltdown", d: "Press R to trigger a nuclear meltdown (costs half your HP, 150s cooldown)" },
   { name: "Lucky", title: "the Gambler", role: "buff", color: "#ffc83a", hat: "#6a4a08", kind: "xpaura", ab: "Lucky Charm", d: "+25% XP from gems" },
   { name: "Moss", title: "the Slimecaller", role: "attack", color: "#8cf08c", hat: "#245c2a", kind: "slimecaller", ab: "Slime Summon", d: "Summons friendly slimes that attack nearby foes and focus the Slime King" },
+  { name: "Oculus", title: "the Farsighted", role: "buff", color: "#ff7a7a", hat: "#3a1030", kind: "tunnel", ab: "Tunnel Vision", d: "When the ShadowCaster blinds you, you keep a wide tunnel of sight instead of near-total darkness" },
 ];
-const UNLOCK_LV = { Atlas: 0, Lumen: 0, Ember: 0, Vex: 2, Bruno: 3, Frost: 4, Prism: 5, Sage: 6, Orbi: 8, Chrono: 10, Nyx: 12, Rocky: 14, Rad: 15, Gale: 17, Volt: 19, Mystic: 21, Lucky: 24, Moss: 9 };
+const UNLOCK_LV = { Atlas: 0, Lumen: 0, Ember: 0, Vex: 2, Bruno: 3, Frost: 4, Prism: 5, Sage: 6, Orbi: 8, Chrono: 10, Nyx: 12, Rocky: 14, Rad: 15, Gale: 17, Volt: 19, Mystic: 21, Lucky: 24, Moss: 9, Oculus: 35 };
 CATALOG.forEach(c => { c.lv = UNLOCK_LV[c.name] | 0; c.cost = 0; });
 const isUnlocked = c => !!(acct.wizards && acct.wizards[c.name]) || acctInfo().lvl >= (c.lv || 0);
 const DIFFS = [
@@ -155,9 +157,29 @@ const DIFFS = [
 const FILTERS = [["all", "All", "All"], ["attack", "⚔", "⚔ Attack"], ["tank", "🛡", "🛡 Tank"], ["heal", "💚", "💚 Heal"], ["support", "🌀", "🌀 Support"], ["buff", "✨", "✨ Buff"]];
 const ROLE_COL = { attack: "#ff8a6a", tank: "#7ab8ff", heal: "#8cf08c", support: "#6fe0d0", buff: "#f09aff" };
 let WIN_TIME = 300, PACE = 1.47;
-const RARE_WEAPON_CHANCE = { meteor: 0.05, flame: 0.12, boom: 0.12, arcane: 0.12, blade: 0.025 };
+const RARE_WEAPON_CHANCE = { meteor: 0.05, flame: 0.12, boom: 0.12, knives: 0.12, blade: 0.025 };
 const ORB_COL = ["#2fa8ff", "#ff3a4a", "#ffd23f"], ORB_NAME = ["Blue", "Red", "Yellow"], ORB_CHANCE = [0.05, 0.075, 0.10], COWBOY_BULLET = 0.5;
 const BASE_SLOTS = 2, MAX_COMP = 5, KINGS_NEEDED = 3;
+let reqKilled = 0, finalSpawned = false, finalDone = false, blindT = 0, blindA = 0, savedFlash = 0, noSave = false;
+const isBig = e => e.type === "boss" || e.type === "cowboy" || e.type === "shadow";
+const reqNeeded = () => stage === 1 ? KINGS_NEEDED : 2;
+const reqName = () => stage === 1 ? "Slime Kings" : stage === 2 ? "Spider Scouts" : "Outlaws";
+const reqIcon = () => stage === 1 ? "👑" : stage === 2 ? "🕷" : "🤠";
+function finalPlan() {
+  if (endless) return [];
+  if (stage === 1) return diffIdx <= 2 ? ["king"] : ["spider"];
+  if (stage === 2) return diffIdx <= 2 ? ["cowboy"] : ["spider", "cowboy"];
+  return diffIdx <= 2 ? ["shadow"] : ["king", "spider", "cowboy", "shadow"];
+}
+const FNAME = { king: "Slime Monarch", spider: "Giant Spider", cowboy: "The Cowboy", shadow: "ShadowCaster" };
+const finalNames = () => finalPlan().map(k => FNAME[k]).join(" + ");
+function bossLabel(b) {
+  if (b.type === "shadow") return "THE SHADOWCASTER";
+  if (b.type === "boss") return b.final ? "SLIME MONARCH" : "SLIME KING";
+  if (b.v === "spider") return b.mini ? "SPIDER SCOUT" : "GIANT SPIDER";
+  if (b.v === "cowboy") return b.mini ? "OUTLAW" : "THE COWBOY";
+  return "COWBOY SPIDER";
+}
 
 /* ================= state ================= */
 let state = "menu", paused = false, hero = HEROES[0];
@@ -185,7 +207,6 @@ function buyWizard(c) {
   acct.wizards[c.name] = true; saveAcct(); beep(720, 0.12, "triangle", 0.06); return true;
 }
 try { const aa = JSON.parse(localStorage.getItem("slimesiege_acct") || "null"); if (aa && aa.xp > 0) acct.xp = aa.xp; if (aa && aa.up) acct.up = aa.up; if (aa && aa.wiz) acct.wiz = aa.wiz; if (aa && Number.isFinite(aa.slimency)) acct.slimency = aa.slimency; if (aa && Number.isFinite(aa.orbProgress)) acct.orbProgress = aa.orbProgress; if (aa && aa.shop) acct.shop = aa.shop; if (aa && aa.wizards) acct.wizards = aa.wizards; } catch (e) {}
-if (acct.shop && acct.shop.knives) { acct.shop.arcane = true; delete acct.shop.knives; saveAcct(); }
 if (!acct.wizards || typeof acct.wizards !== "object") acct.wizards = { Atlas: true };
 if (!Object.keys(acct.wizards).length) acct.wizards.Atlas = true;
 if (!acct.wizards.Atlas) acct.wizards.Atlas = true;
@@ -248,14 +269,14 @@ function stat() {
 
 function startGame(h) {
   hero = h; audio(); DF = makeDF(diffIdx, stage); orbHeld = [false, false, false]; lastGain = null; PD = []; cowboysKilled = 0; run = { absorbed: 0, healed: 0, orbs: 0 }; endNote = "";
-  wl = { [h.w]: 1 }; for (const id of Object.keys(acct.shop || {})) if (acct.shop[id] && WDEF[id]) wl[id] = Math.max(wl[id] || 0, 1); pl = {}; cd = { bolt: 0.3, zap: 0.5, nova: 2, boom: 1, arcane: 0.4, meteor: 0 }; FZ = []; MT = []; fT = 0; RAD = []; MS = null; flashT = 0; sprintTog = false;
+  wl = { [h.w]: 1 }; for (const id of Object.keys(acct.shop || {})) if (acct.shop[id] && WDEF[id]) wl[id] = Math.max(wl[id] || 0, 1); pl = {}; cd = { bolt: 0.3, zap: 0.5, nova: 2, boom: 1, knives: 0.4, meteor: 0, blade: 0 }; reqKilled = 0; finalSpawned = false; finalDone = false; blindT = 0; blindA = 0; FZ = []; MT = []; fT = 0; RAD = []; MS = null; flashT = 0; sprintTog = false;
   P = { x: 0, y: 0, hp: stat().maxhp, stam: stat().stamMax, exh: false, stR: 0, sprint: false, rdCD: 0, inv: 0, face: 1, fx: 0, fy: 1, moving: false, hurt: 0, abCD: 0, dfCD: 0, dfT: 0, storm: 0, stormT: 0, shieldT: 0 }; freeze = 0;
   E = []; S = []; ES = []; G = []; PT = []; TX = []; FX = []; RN = []; FS = [];
   time = 0; kills = 0; level = 1; xp = 0; xpNeed = 5; pending = 0; boss = null; shake = 0; hitStop = 0;
   if (endless) { WIN_TIME = Infinity; PACE = 1.25; } else { WIN_TIME = rint(300, 600); PACE = (420 + 0.35 * (WIN_TIME - 240)) / WIN_TIME; }
   kingTimes = []; kingIdx = 0; kingsKilled = 0; cowboyDead = false; cowboySpawned = false; overtime = false; SZ = []; szT = 12 * DF.safe; swarmEvery = endless ? 45 : WIN_TIME / 7; nextCowboy = 300;
   spawnT = 1; nextSwarm = swarmEvery * 0.6; nextBoss = Infinity; bossN = 0;
-  banner = { text: endless ? "♾ ENDLESS — COLLECT ORBS TO SUMMON KINGS" : "SURVIVE " + fmt(WIN_TIME) + "  ·  SUMMON 3 KINGS, THEN THE COWBOY SPIDER", life: 4, color: "#fff" };
+  banner = { text: endless ? "♾ ENDLESS — COLLECT ORBS TO SUMMON KINGS" : "SURVIVE " + fmt(WIN_TIME) + "  ·  SLAY " + reqNeeded() + " " + reqName().toUpperCase() + ", THEN " + finalNames().toUpperCase(), life: 4, color: "#fff" };
   paused = false; state = "play"; overT = 0;
   CP = []; recruitPending = 0; medT = 5;
   for (const n of selComp) addComp(n, true);
@@ -282,7 +303,7 @@ function spawnEnemy(type, x, y, extra) {
   const d = EDEF[type], hpm = 1 + time * PACE / 150;
   const e = { type, x, y, r: d.r, hp: d.hp * hpm * DF.hp, sp: d.sp * (1 + time * PACE / 900) * DF.spd, dmg: d.dmg, xp: d.xp,
     flash: 0, kx: 0, ky: 0, t: rnd(0, 6), cd: rnd(1, 2.2), orbCD: 0, boomCD: 0, dead: false };
-  if (type !== "boss" && type !== "cowboy" && type !== "spiderling") {
+  if (type !== "boss" && type !== "cowboy" && type !== "shadow" && type !== "spiderling") {
     const traitChance = Math.min(0.48, 0.12 + (DF.stage - 1) * 0.08 + diffIdx * 0.025 + time / 1800);
     if (Math.random() < traitChance) {
       e.trait = pick(["invisible", "armored", "berserk", "swift"]);
@@ -291,7 +312,7 @@ function spawnEnemy(type, x, y, extra) {
       if (e.trait === "swift") e.sp *= 1.3;
     }
   }
-  if (type !== "boss" && type !== "cowboy" && type !== "spiderling" && DF.elite && time > 25 && Math.random() < DF.elite) { e.elite = true; e.hp *= 3; e.r *= 1.3; e.xp *= 3; e.dmg *= 1.25; }
+  if (type !== "boss" && type !== "cowboy" && type !== "shadow" && type !== "spiderling" && DF.elite && time > 25 && Math.random() < DF.elite) { e.elite = true; e.hp *= 3; e.r *= 1.3; e.xp *= 3; e.dmg *= 1.25; }
   if (type === "charger") { e.st = "walk"; e.stt = rnd(1.5, 3); e.dx = 0; e.dy = 0; }
   if (type === "imp") { e.stt = rnd(1.5, 3); e.volley = 0; }
   if (type === "shaman") { e.stt = 2; }
@@ -299,7 +320,7 @@ function spawnEnemy(type, x, y, extra) {
   E.push(e); return e;
 }
 function ringPos(rad) { const a = rnd(0, TAU); return [P.x + Math.cos(a) * rad, P.y + Math.sin(a) * rad]; }
-function spawnRad() { return Math.hypot(W, H) / 2 + 50; }
+function spawnRad() { return Math.hypot(W, H) / 2 / Math.min(1, settings.fov) + 50; }
 function pickType() {
   const v = time * PACE + (DF.stage - 1) * 40, w = [["slime", 10]];
   if (v > 20) w.push(["bat", 4 + v / 40]);
@@ -307,7 +328,7 @@ function pickType() {
   if (v > 55) w.push(["brute", 1.5 + v / 80]);
   if (v > 70) w.push(["ghost", 2.5]);
   if (v > 85) w.push(["spitter", 2.5]);
-  if (v > 75) w.push(["orbshooter", 2.4]);
+  if (v > 75) w.push(["knifer", 2.4]);
   if (v > 100) w.push(["imp", 2]);
   if (v > 120) w.push(["bomber", 2.5]);
   if (v > 130) w.push(["charger", 2.2]);
@@ -323,17 +344,82 @@ function collectKingOrb(c) {
   else banner = { text: "🔮 " + ORB_NAME[c] + " orb collected (" + n + " / 3)", life: 1.8, color: ORB_COL[c] };
 }
 function summonKing() {
-  if (state !== "play" || paused || orbHeld.filter(Boolean).length < 3 || (boss && !boss.dead)) return;
+  if (state !== "play" || paused || orbHeld.filter(Boolean).length < 3 || (boss && !boss.dead) || (!endless && finalSpawned)) return;
   orbHeld = [false, false, false];
   spawnBoss();
+}
+function spawnVariant(kind, x, y, mini, mult = 1) {
+  const base = kind === "spider" ? 5200 : 6400, hp = base * (mini ? 0.25 : 1) * mult * DF.boss;
+  const e = spawnEnemy("cowboy", x, y, { hp, maxhp: hp, v: kind, mini: !!mini, final: !mini, dmg: stat().maxhp * 0.3 / DF.dmg, st: "chase", stt: 3, atk: 3, pew: 1, wv: 0, muz: 0, aimx: 1, aimy: 0, tx: x, ty: y });
+  if (mini) { e.r = 42; e.sc = 0.7; e.sp *= 1.1; }
+  return e;
 }
 function spawnBoss() {
   if (boss && !boss.dead) return;
   bossN++;
   const [x, y] = ringPos(spawnRad() * 0.8);
+  if (!endless && stage > 1) {
+    const kind = stage === 2 ? "spider" : (bossN % 2 ? "cowboy" : "spider");
+    boss = spawnVariant(kind, x, y, true);
+    banner = { text: kind === "spider" ? "🕷 A SPIDER SCOUT SKITTERS IN! 🕷" : "🤠 AN OUTLAW RIDES IN! 🤠", life: 3, color: "#e8b070" }; sfx.boss(); shake = 12;
+    return;
+  }
   const hp = (450 + 550 * bossN) * DF.boss;
   boss = spawnEnemy("boss", x, y, { hp, maxhp: hp, st: "chase", stt: 2.5, dx: 0, dy: 0, n: bossN });
   banner = { text: "☠ THE SLIME KING APPROACHES ☠", life: 3, color: "#ff5a6e" }; sfx.boss(); shake = 14;
+}
+function spawnFinal(k, x, y, mult) {
+  if (k === "king") { const hp = 5500 * mult * DF.boss, e = spawnEnemy("boss", x, y, { hp, maxhp: hp, st: "chase", stt: 2, dx: 0, dy: 0, n: 5, final: true }); e.r *= 1.3; return e; }
+  if (k === "shadow") { const hp = 24000 * DF.boss; return spawnEnemy("shadow", x, y, { hp, maxhp: hp, final: true, st: "chase", stt: 0, tpT: 8, sumT: 5, act: "melee", tx: x, ty: y, aimx: 1, aimy: 0, dmg: stat().maxhp * 0.2 / DF.dmg }); }
+  return spawnVariant(k, x, y, false, mult);
+}
+function spawnFinals() {
+  finalSpawned = true; const plan = finalPlan(), mult = plan.length > 2 ? 0.75 : plan.length > 1 ? 0.85 : 1;
+  for (const k of plan) { const [x, y] = ringPos(spawnRad() * 0.8); spawnFinal(k, x, y, mult); }
+  banner = { text: plan.length > 1 ? "☠ THE FINAL BOSSES ARRIVE ☠" : "☠ FINAL BOSS: " + finalNames().toUpperCase() + " ☠", life: 4.5, color: "#ff3a5a" }; sfx.boss(); shake = 22;
+}
+function reqProgress(label) {
+  if (reqKilled < reqNeeded()) banner = { text: label + " DEFEATED!  (" + reqKilled + "/" + reqNeeded() + ")", life: 2.5, color: "#ffe14a" };
+  else if (!finalSpawned) spawnFinals();
+}
+function finalDown(e, label) {
+  const left = E.filter(o => !o.dead && o.final).length;
+  banner = { text: left ? "☠ " + label + " FALLS! " + left + " FINAL BOSS" + (left > 1 ? "ES" : "") + " REMAIN" : "☠ " + label + " FALLS! ☠", life: 3, color: "#ffe14a" };
+  if (!left) finalDone = true;
+}
+function shadowSummon(e, rage) {
+  if (E.length > DF.cap + 30) return;
+  const pool = ["slime", "bat", "brute", "spitter", "ghost", "knifer", "imp", "charger", "splitter", "shaman", "bomber", "spiderling"], n = 4 + (rage ? 3 : 0);
+  for (let i = 0; i < n; i++) { const a = rnd(0, TAU), rr = rnd(40, 110); spawnEnemy(pick(pool), e.x + Math.cos(a) * rr, e.y + Math.sin(a) * rr); }
+  burst(e.x, e.y, 18, "#6a2a8a", 200, 0.6); beep(140, 0.25, "sawtooth", 0.06, -50); addText(e.x, e.y - 150, "ARISE!", "#c05aff", 18);
+}
+function blindPlayer(sec) {
+  blindT = Math.max(blindT, sec);
+  banner = { text: hasComp("Oculus") ? "👁 TUNNEL VISION!" : "👁 BLINDED FOR " + sec + "s!", life: 2, color: "#ff5a6e" }; sfx.boss();
+}
+function shadowAct(e, rage) {
+  const a = e.act, mh = stat().maxhp;
+  if (a === "blind") {
+    blindPlayer(5);
+    for (let i = 0; i < 14; i++) { const an = i / 14 * TAU; ES.push({ x: e.x, y: e.y - 40, vx: Math.cos(an) * 190, vy: Math.sin(an) * 190, life: 4, r: 8, dmg: 9 }); }
+  } else if (a === "king") {
+    for (let k = 0; k < 2; k++) { const n = 18, off = rnd(0, TAU); for (let i = 0; i < n; i++) { const an = off + i / n * TAU; ES.push({ x: e.x, y: e.y - 20, vx: Math.cos(an) * (160 + k * 70), vy: Math.sin(an) * (160 + k * 70), life: 5, r: 8, dmg: 12 }); } }
+    sfx.boss(); shake = Math.max(shake, 10);
+  } else if (a === "spider") {
+    const base = Math.atan2(P.y - e.y, P.x - e.x), n = rage ? 9 : 7;
+    for (let i = 0; i < n; i++) { const an = base + (i - (n - 1) / 2) * 0.22; ES.push({ x: e.x, y: e.y - 20, vx: Math.cos(an) * 230, vy: Math.sin(an) * 230, life: 4, r: 8, dmg: 20, web: true }); }
+    for (let i = 0; i < 3; i++) spawnEnemy("spiderling", e.x + rnd(-50, 50), e.y + rnd(-50, 50));
+    sfx.spit();
+  } else if (a === "pounce") {
+    RN.push({ x: e.tx, y: e.ty, r: 0, max: 120, sp: 500, dmg: 0, hit: new Set(), col: "180,60,255", visual: true });
+    if (Math.hypot(P.x - e.tx, P.y - e.ty) < 125) damagePlayer(mh * 0.4 / DF.dmg);
+    shake = Math.max(shake, 14); burst(e.tx, e.ty, 24, "#a040ff", 220, 0.7); sfx.boom();
+    for (let i = 0; i < 3; i++) spawnEnemy("spiderling", e.tx + rnd(-50, 50), e.ty + rnd(-50, 50));
+  } else if (a === "cowboy") {
+    const n = rage ? 5 : 3, base = Math.atan2(e.aimy, e.aimx), bd = mh * COWBOY_BULLET * 0.5 / DF.dmg;
+    for (let i = 0; i < n; i++) { const an = base + (i - (n - 1) / 2) * 0.24; ES.push({ x: e.x + Math.cos(an) * 34, y: e.y - 60 + Math.sin(an) * 34, vx: Math.cos(an) * 540, vy: Math.sin(an) * 540, life: 2.4, r: 8, dmg: bd, bullet: true }); }
+    addText(e.x, e.y - 160, "PEW!", "#ffe14a", 24); beep(1500, 0.07, "square", 0.06, -1000); noise(0.08, 0.05, 2500);
+  } else shadowSummon(e, true);
 }
 function spawnCowboy() {
   cowboySpawned = true;
@@ -393,8 +479,9 @@ function dmgEnemy(e, base, dx = 0, dy = 0, kb = 120, noMight) {
   if (e.dead) return;
   let d = base * (noMight ? 1 : stat().might), crit = Math.random() < 0.1;
   if (crit) d *= 2;
+  if (e.type === "shadow") { if (e.st === "fade") return; d *= 0.7; }
   e.hp -= d; e.flash = 0.09;
-  const m = (e.type === "boss" || e.type === "cowboy") ? 0.05 : 1, L = Math.hypot(dx, dy) || 1;
+  const m = (isBig(e)) ? 0.05 : 1, L = Math.hypot(dx, dy) || 1;
   e.kx += dx / L * kb * m; e.ky += dy / L * kb * m;
   addText(e.x + rnd(-6, 6), e.y - e.r - 6, Math.round(d), crit ? "#ffe14a" : "#fff", crit ? 20 : 13);
   sfx.hit();
@@ -407,29 +494,41 @@ function explode(x, y, rad, dmg, hurtPlayer) {
   if (hurtPlayer && Math.hypot(P.x - x, P.y - y) < rad + 12) damagePlayer(20);
 }
 function checkWin() {
-  if (!endless && state === "play" && kingsKilled >= KINGS_NEEDED && cowboyDead) { state = "win"; overT = 0; sfx.win(); recordRun(true); }
+  if (!endless && state === "play" && finalSpawned && finalDone) { state = "win"; overT = 0; sfx.win(); recordRun(true); }
 }
 function killEnemy(e) {
   e.dead = true; kills++; sfx.pop();
-  const col = { slime: "#6be36b", bat: "#a77bff", brute: "#ff7a4a", spitter: "#ffd84a", bomber: "#ff4a4a", boss: "#5fa8ff", splitter: "#6fdcae", ghost: "#dfe9ff", charger: "#c8924a", imp: "#b06be0", shaman: "#5fd080", orbshooter: "#62cfff", spiderling: "#8a4a68", cowboy: "#a05aff" }[e.type];
-  const bigOne = e.type === "boss" || e.type === "cowboy";
+  const col = { slime: "#6be36b", bat: "#a77bff", brute: "#ff7a4a", spitter: "#ffd84a", bomber: "#ff4a4a", boss: "#5fa8ff", splitter: "#6fdcae", ghost: "#dfe9ff", charger: "#c8924a", imp: "#b06be0", shaman: "#5fd080", knifer: "#7a7a8a", spiderling: "#8a4a68", cowboy: "#a05aff", shadow: "#6a1a4a" }[e.type];
+  const bigOne = isBig(e);
   burst(e.x, e.y, bigOne ? 70 : 9, col, bigOne ? 320 : 150, 0.7);
   if (e.type !== "ghost") { PD.push({ x: e.x, y: e.y, r: e.r * (bigOne ? 1.6 : rnd(1.1, 1.6)), life: bigOne ? 16 : 9, max: bigOne ? 16 : 9, col, ph: rnd(0, 6), sx: rnd(0.8, 1.2) }); if (PD.length > 110) PD.shift(); }
   if (e.type === "boss") {
-    for (let i = 0; i < 24; i++) G.push({ x: e.x + rnd(-50, 50), y: e.y + rnd(-50, 50), v: 3, t: "gem" });
+    for (let i = 0; i < (e.final ? 40 : 24); i++) G.push({ x: e.x + rnd(-50, 50), y: e.y + rnd(-50, 50), v: 3, t: "gem" });
     G.push({ x: e.x, y: e.y, v: 0, t: "chest" });
     ES = []; if (boss === e) boss = null; kingsKilled++; shake = 22; hitStop = 0.15; sfx.boom();
+    if (e.final) { finalDown(e, "THE SLIME MONARCH"); checkWin(); return; }
     banner = { text: "SLIME KING DEFEATED!  (" + Math.min(kingsKilled, KINGS_NEEDED) + "/" + KINGS_NEEDED + ")", life: 2.5, color: "#ffe14a" };
-    if (kingsKilled % KINGS_NEEDED === 0 && (endless || !cowboySpawned)) spawnCowboy();
+    if (endless) { if (kingsKilled % KINGS_NEEDED === 0) spawnCowboy(); }
+    else { reqKilled++; reqProgress("SLIME KING"); }
     checkWin(); return;
   }
   if (e.type === "cowboy") {
-    for (let i = 0; i < 36; i++) G.push({ x: e.x + rnd(-70, 70), y: e.y + rnd(-70, 70), v: 3, t: "gem" });
+    for (let i = 0; i < (e.mini ? 20 : 36); i++) G.push({ x: e.x + rnd(-70, 70), y: e.y + rnd(-70, 70), v: 3, t: "gem" });
     G.push({ x: e.x, y: e.y, v: 0, t: "chest" });
-    for (const o of E) if (!o.dead && (o.type === "orbshooter" || o.type === "spiderling")) { o.dead = true; burst(o.x, o.y, 4, "#8a8a9a", 90, 0.4); }
-    ES = []; cowboyDead = true; cowboysKilled++; shake = 26; hitStop = 0.2; sfx.boom();
+    for (const o of E) if (!o.dead && (o.type === "knifer" || o.type === "spiderling")) { o.dead = true; burst(o.x, o.y, 4, "#8a8a9a", 90, 0.4); }
+    ES = []; if (boss === e) boss = null; cowboysKilled++; shake = 26; hitStop = 0.2; sfx.boom();
+    if (e.mini) { reqKilled++; reqProgress(bossLabel(e)); checkWin(); return; }
+    if (e.final) { finalDown(e, bossLabel(e)); checkWin(); return; }
+    cowboyDead = true;
     banner = { text: "🤠🕷 THE COWBOY SPIDER IS DOWN! 🕷🤠", life: 3, color: "#e8b070" };
     checkWin(); return;
+  }
+  if (e.type === "shadow") {
+    for (let i = 0; i < 60; i++) G.push({ x: e.x + rnd(-90, 90), y: e.y + rnd(-90, 90), v: 3, t: "gem" });
+    G.push({ x: e.x, y: e.y, v: 0, t: "chest" });
+    for (const o of E) if (!o.dead && !isBig(o)) { o.dead = true; burst(o.x, o.y, 4, "#6a2a8a", 90, 0.4); }
+    ES = []; blindT = 0; cowboysKilled++; shake = 30; hitStop = 0.25; sfx.boom(); burst(e.x, e.y, 90, "#ff2a3a", 360, 1);
+    finalDown(e, "THE SHADOWCASTER"); checkWin(); return;
   }
   G.push({ x: e.x, y: e.y, v: e.xp, t: "gem" });
   if (e.type === "slime" && !e.small) {
@@ -485,7 +584,7 @@ function drawSafeZones() {
 }
 function drawZoneArrows() {
   for (const z of SZ) {
-    const dx = z.x - camX, dy = z.y - camY;
+    const dx = (z.x - camX) * settings.fov, dy = (z.y - camY) * settings.fov;
     if (Math.abs(dx) < W / 2 && Math.abs(dy) < H / 2) continue;
     const k = Math.min((W / 2 - 34) / (Math.abs(dx) || 1), (H / 2 - 34) / (Math.abs(dy) || 1));
     ctx.save(); ctx.translate(W / 2 + dx * k, H / 2 + dy * k);
@@ -557,16 +656,16 @@ function updateWeapons(dt) {
       } else cd.boom = 0.2;
     }
   }
-  // Throwing Knives (the only knife-based weapon)
-  if (wl.arcane) {
-    cd.arcane -= dt * st.haste;
-    if (cd.arcane <= 0) {
-      const L = wl.arcane, n = [0, 2, 3, 3, 4, 6][L];
+  // Throwing knives
+  if (wl.knives) {
+    cd.knives -= dt * st.haste;
+    if (cd.knives <= 0) {
+      const L = wl.knives, n = [0, 2, 3, 3, 4, 6][L];
       let base = Math.atan2(P.fy, P.fx);
       if (usingMouse) base = Math.atan2(pointer.y - H / 2, pointer.x - W / 2);
       else { const tg = nearest(px, py, 560); if (tg) base = Math.atan2(tg.y - py, tg.x - px); }
-      for (let i = 0; i < n; i++) { const a = base + (i - (n - 1) / 2) * 0.14; S.push({ k: "arcaneKnife", x: px, y: py, vx: Math.cos(a) * 720, vy: Math.sin(a) * 720, life: 0.8, dmg: 8 + 3 * L + (L >= 4 ? 4 : 0), pierce: 3, hit: new Set(), r: 9, spin: Math.atan2(Math.sin(a), Math.cos(a)) }); }
-      sfx.shoot(); cd.arcane = 1.15 - 0.1 * L;
+      for (let i = 0; i < n; i++) { const a = base + (i - (n - 1) / 2) * 0.14; S.push({ k: "bolt", knife: true, x: px, y: py, vx: Math.cos(a) * 720, vy: Math.sin(a) * 720, life: 0.8, dmg: 8 + 3 * L + (L >= 4 ? 4 : 0), pierce: 3, hit: new Set(), r: 6, col: "#e8f4ff", glow: "rgba(200,230,255,.3)" }); }
+      sfx.shoot(); cd.knives = 1.15 - 0.1 * L;
     }
   }
   // Flame trail
@@ -586,23 +685,14 @@ function updateWeapons(dt) {
     if (!m.hit && m.t >= 1.8) { m.hit = true; m.on = 15; splash(m.x, m.y, 250 + 30 * m.L, 110 + 40 * m.L, "255,80,40"); burst(m.x, m.y, 44, "#ff9a3a", 340, 0.9); shake = 30; flashT = 0.9; hitStop = 0.1; banner = { text: "🔥 THE SKY BURNS!", life: 2.2, color: "#ff6a4a" }; sfx.boom(); }
     if (m.hit) {
       m.on -= dt; m.tk -= dt; m.tk2 -= dt;
-      if (m.tk <= 0) { m.tk = 0.5; for (const e of E) { if (e.dead) continue; const big = e.type === "boss" || e.type === "cowboy"; dmgEnemy(e, big ? e.maxhp * 0.004 : 4 + 3 * m.L, 0, 0, 0, big); } }
+      if (m.tk <= 0) { m.tk = 0.5; for (const e of E) { if (e.dead) continue; const big = isBig(e); dmgEnemy(e, big ? e.maxhp * 0.004 : 4 + 3 * m.L, 0, 0, 0, big); } }
       if (m.tk2 <= 0) { m.tk2 = 1; if (!(P.inv > 0)) { P.hp = Math.max(1, P.hp - st.maxhp * 0.012); P.hurt = 0.12; addText(P.x, P.y - 30, "🔥", "#ff8a4a", 14); } for (const c of CP) if (c.def.kind === "tank" && c.hp > 3) c.hp -= 3; }
       if (m.on <= 0) MS = null;
     }
   }
-  // Rare Rift Blade: one forward pass, each target can only be struck once.
-  if (wl.blade) {
-    cd.blade = (cd.blade === undefined ? 5 : cd.blade) - dt;
-    if (cd.blade <= 0) {
-      let an = Math.atan2(P.fy || 0, P.fx || 1);
-      if (usingMouse) an = Math.atan2(pointer.y - H / 2, pointer.x - W / 2);
-      else { const t = nearest(px, py, 650); if (t) an = Math.atan2(t.y - py, t.x - px); }
-      S.push({ k: "blade", x: px + Math.cos(an) * 28, y: py + Math.sin(an) * 28, vx: Math.cos(an) * 760, vy: Math.sin(an) * 760, life: 1.35, r: 25, spin: 0, hit: new Set() });
-      cd.blade = 18; beep(260, 0.18, "sawtooth", 0.06, 500); burst(px, py, 12, "#8feaff", 160, 0.4);
-    }
-  }
-  // Orbiting Orbs
+  // Rare Rift Blade: manual (B). One forward pass, each target can only be struck once.
+  if (wl.blade) cd.blade = Math.max(0, (cd.blade || 0) - dt);
+  // Orbit
   if (wl.orbit) {
     const L = wl.orbit, n = [0, 2, 3, 3, 4, 5][L], rad = 62 + 7 * L + (L >= 3 ? 8 : 0), sp = 2.6 + 0.35 * L;
     for (let i = 0; i < n; i++) {
@@ -631,6 +721,16 @@ function orbList() {
   for (let i = 0; i < n; i++) { const a = time * sp + i * TAU / n; out.push({ x: P.x + Math.cos(a) * rad, y: P.y + Math.sin(a) * rad, r: or }); }
   return out;
 }
+function triggerBlade() {
+  if (!P || state !== "play" || paused || !wl.blade) return;
+  if ((cd.blade || 0) > 0) { addText(P.x, P.y - 38, "Blade ready in " + Math.ceil(cd.blade) + "s", "#8feaff", 13); return; }
+  const px = P.x, py = P.y;
+  let an = Math.atan2(P.fy || 0, P.fx || 1);
+  if (usingMouse) an = Math.atan2(pointer.y - H / 2, pointer.x - W / 2);
+  else { const t = nearest(px, py, 650); if (t) an = Math.atan2(t.y - py, t.x - px); }
+  S.push({ k: "blade", x: px + Math.cos(an) * 28, y: py + Math.sin(an) * 28, vx: Math.cos(an) * 760, vy: Math.sin(an) * 760, life: 1.35, r: 25, spin: 0, hit: new Set() });
+  cd.blade = 15; beep(260, 0.18, "sawtooth", 0.06, 500); burst(px, py, 12, "#8feaff", 160, 0.4);
+}
 function triggerMeteor() {
   if (!P || state !== "play" || paused || !wl.meteor || MS || (cd.meteor || 0) > 0) { if (state === "play" && wl.meteor && cd.meteor > 0) addText(P.x, P.y - 38, "Meteor ready in " + Math.ceil(cd.meteor) + "s", "#ffb080", 13); return; }
   MS = { x: P.x + rnd(-140, 140), y: P.y + rnd(-140, 140), t: 0, L: wl.meteor, hit: false, on: 0, tk: 0, tk2: 1 };
@@ -642,7 +742,7 @@ function meltdown(who) {
   P.hp = Math.max(1, Math.ceil(P.hp / 2)); P.rdCD = 150; P.hurt = 0.3;
   RN.push({ x: P.x, y: P.y, r: 0, max: 680, sp: 950, dmg: 0, hit: new Set(), col: "170,255,110", visual: true });
   RN.push({ x: P.x, y: P.y, r: 0, max: 440, sp: 650, dmg: 0, hit: new Set(), col: "255,255,255", visual: true });
-  for (const e of E) { if (e.dead) continue; if (Math.hypot(e.x - P.x, e.y - P.y) < 680) { const big = e.type === "boss" || e.type === "cowboy"; dmgEnemy(e, big ? e.maxhp * 0.08 : 140 + 8 * level, e.x - P.x, e.y - P.y, 520, true); } }
+  for (const e of E) { if (e.dead) continue; if (Math.hypot(e.x - P.x, e.y - P.y) < 680) { const big = isBig(e); dmgEnemy(e, big ? e.maxhp * 0.08 : 140 + 8 * level, e.x - P.x, e.y - P.y, 520, true); } }
   ES = [];
   RAD.push({ x: P.x, y: P.y, r: 330, life: 60, max: 60, tick: 0.5 });
   flashT = 1; shake = 36; hitStop = 0.12; sfx.boom(); beep(70, 0.9, "sawtooth", 0.08, -30);
@@ -651,7 +751,7 @@ function meltdown(who) {
 function updateRad(dt) {
   for (const r of RAD) {
     r.life -= dt; r.tick -= dt;
-    if (r.tick <= 0) { r.tick = 0.5; for (const e of E) { if (e.dead) continue; if (Math.hypot(e.x - r.x, e.y - r.y) < r.r + e.r) { const big = e.type === "boss" || e.type === "cowboy"; dmgEnemy(e, big ? e.maxhp * 0.0025 : 12 + 0.6 * level, 0, 0, 0, true); } } }
+    if (r.tick <= 0) { r.tick = 0.5; for (const e of E) { if (e.dead) continue; if (Math.hypot(e.x - r.x, e.y - r.y) < r.r + e.r) { const big = isBig(e); dmgEnemy(e, big ? e.maxhp * 0.0025 : 12 + 0.6 * level, 0, 0, 0, true); } } }
   }
   RAD = RAD.filter(r => r.life > 0);
 }
@@ -941,6 +1041,7 @@ function applyChoice(c) {
 function update(dt) {
   if (hitStop > 0) { hitStop -= dt; return; }
   time += dt;
+  if (blindT > 0) { blindT -= dt; blindA = Math.min(1, blindA + dt * 4); } else blindA = Math.max(0, blindA - dt * 3);
   if (settings.autoKing && orbHeld.every(Boolean) && !(boss && !boss.dead)) summonKing();
   const st = stat();
   if (shake > 0) shake = Math.max(0, shake - dt * 28);
@@ -952,7 +1053,7 @@ function update(dt) {
     P.storm -= dt; P.stormT -= dt;
     if (P.stormT <= 0) {
       P.stormT = 0.11;
-      const c = E.filter(e => !e.dead && Math.abs(e.x - P.x) < W / 2 && Math.abs(e.y - P.y) < H / 2);
+      const c = E.filter(e => !e.dead && Math.abs(e.x - P.x) < W / 2 / settings.fov && Math.abs(e.y - P.y) < H / 2 / settings.fov);
       if (c.length) { zapAt(pick(c), 38); if (Math.random() < 0.4) sfx.zap(); }
     }
   }
@@ -1008,11 +1109,11 @@ function update(dt) {
       if (e.cd <= 0 && d < 520) { e.cd = 2.3; ES.push({ x: e.x, y: e.y, vx: ux * 150, vy: uy * 150, life: 5, r: 7, dmg: 9 }); sfx.spit(); }
     } else if (e.type === "splitter") { vx = ux * e.sp; vy = uy * e.sp; }
     else if (e.type === "spiderling") { const w = Math.sin(e.t * 9) * 0.35; vx = (ux - uy * w) * e.sp; vy = (uy + ux * w) * e.sp; }
-    else if (e.type === "orbshooter") {
+    else if (e.type === "knifer") {
       const k = d > 300 ? 1 : d < 190 ? -0.7 : 0; vx = ux * e.sp * k; vy = uy * e.sp * k; e.cd -= dt;
       if (e.cd <= 0 && d < 540) {
         e.cd = rnd(2.0, 2.9); const n = time * PACE > 220 ? 2 : 1, base = Math.atan2(uy, ux);
-        for (let i = 0; i < n; i++) { const a = base + (i - (n - 1) / 2) * 0.2; ES.push({ x: e.x, y: e.y, vx: Math.cos(a) * 270, vy: Math.sin(a) * 270, life: 3.5, r: 6, dmg: 8, arcaneOrb: true }); }
+        for (let i = 0; i < n; i++) { const a = base + (i - (n - 1) / 2) * 0.2; ES.push({ x: e.x, y: e.y, vx: Math.cos(a) * 270, vy: Math.sin(a) * 270, life: 3.5, r: 6, dmg: 8, knife: true }); }
         beep(900, 0.05, "triangle", 0.03, 300);
       }
     }
@@ -1039,7 +1140,7 @@ function update(dt) {
       if (e.stt <= 0) {
         e.stt = 2.5;
         for (const o of E) {
-          if (o.dead || o === e || o.type === "boss" || o.type === "cowboy" || o.hp >= o.maxhp) continue;
+          if (o.dead || o === e || isBig(o) || o.hp >= o.maxhp) continue;
           const ddx = o.x - e.x, ddy = o.y - e.y;
           if (ddx * ddx + ddy * ddy < 170 * 170) { o.hp = Math.min(o.maxhp, o.hp + o.maxhp * 0.25); burst(o.x, o.y, 4, "#8cf08c", 60, 0.5); }
         }
@@ -1052,8 +1153,8 @@ function update(dt) {
         const k = d > 300 ? 1 : d < 200 ? -0.5 : 0, sx = -uy, sy = ux, dir = Math.sin(e.t * 0.5) > 0 ? 1 : -1;
         vx = (ux * k + sx * 0.5 * dir) * e.sp; vy = (uy * k + sy * 0.5 * dir) * e.sp;
         if (e.stt <= 0) {
-          e.atk = (e.atk + 1) % 4;
-          if (e.atk === 0) { e.st = "aim"; e.stt = rage ? 0.6 : 0.85; e.pew = rage ? 3 : (Math.random() < 0.4 ? 2 : 1); }
+          e.atk = (e.atk + 1) % 4; if (e.v === "spider" && e.atk === 0) e.atk = 1;
+          if (e.atk === 0 || (e.v === "cowboy" && e.atk === 1)) { e.st = "aim"; e.stt = rage ? 0.6 : 0.85; e.pew = e.v === "cowboy" ? (rage ? 5 : 3) : rage ? 3 : (Math.random() < 0.4 ? 2 : 1); }
           else if (e.atk === 1) { e.st = "web"; e.stt = 1.1; e.wv = 0; }
           else if (e.atk === 2) { e.st = "ptele"; e.stt = 0.95; e.tx = P.x; e.ty = P.y; }
           else { e.st = "brood"; e.stt = 0.8; }
@@ -1084,14 +1185,14 @@ function update(dt) {
           RN.push({ x: e.x, y: e.y, r: 0, max: 120, sp: 500, dmg: 0, hit: new Set(), col: "230,170,90", visual: true });
           if (Math.hypot(P.x - e.x, P.y - e.y) < 120) damagePlayer(stat().maxhp * 0.4 / DF.dmg);
           shake = Math.max(shake, 14); burst(e.x, e.y, 24, "#c8a064", 220, 0.7); sfx.boom();
-          for (let i = 0; i < 3; i++) spawnEnemy("spiderling", e.x + rnd(-50, 50), e.y + rnd(-50, 50));
+          for (let i = 0; i < 3; i++) spawnEnemy(e.v === "cowboy" ? "knifer" : "spiderling", e.x + rnd(-50, 50), e.y + rnd(-50, 50));
           e.st = "chase"; e.stt = 2.2;
         }
       } else if (e.st === "brood") {
         if (e.stt <= 0) {
           const n = 5 + (rage ? 3 : 0);
-          for (let i = 0; i < n; i++) spawnEnemy("spiderling", e.x + rnd(-60, 60), e.y + rnd(-60, 60));
-          if (rage) for (let i = 0; i < 2; i++) spawnEnemy("orbshooter", e.x + rnd(-70, 70), e.y + rnd(-70, 70));
+          for (let i = 0; i < n; i++) spawnEnemy(e.v === "cowboy" ? "knifer" : "spiderling", e.x + rnd(-60, 60), e.y + rnd(-60, 60));
+          if (rage && e.v !== "cowboy") for (let i = 0; i < 2; i++) spawnEnemy("knifer", e.x + rnd(-70, 70), e.y + rnd(-70, 70));
           sfx.boss(); e.st = "chase"; e.stt = 3;
         }
       }
@@ -1108,21 +1209,51 @@ function update(dt) {
         if (e.hp < e.maxhp * 0.5) for (let i = 0; i < 3; i++) spawnEnemy("slime", e.x + rnd(-40, 40), e.y + rnd(-40, 40));
       } }
     }
+    else if (e.type === "shadow") {
+      const rage = e.hp < e.maxhp * 0.5; e.stt -= dt; e.tpT -= dt; e.sumT -= dt;
+      if (e.st === "chase") {
+        const k = d > 150 ? 1 : d < 90 ? -0.4 : 0, spd = e.sp * (rage ? 1.3 : 1); vx = ux * spd * k; vy = uy * spd * k;
+        if (e.sumT <= 0) { e.sumT = rage ? 6 : 9; shadowSummon(e, rage); }
+        if (e.tpT <= 0) { e.st = "fade"; e.stt = 0.6; burst(e.x, e.y, 14, "#2a0a30", 160, 0.5); beep(110, 0.4, "sawtooth", 0.06, -40); }
+      } else if (e.st === "fade") {
+        if (e.stt <= 0) {
+          burst(e.x, e.y, 22, "#2a0a30", 220, 0.6);
+          const a = rnd(0, TAU), rr = rnd(170, 250); e.x = P.x + Math.cos(a) * rr; e.y = P.y + Math.sin(a) * rr;
+          burst(e.x, e.y, 24, "#ff2a3a", 200, 0.6); sfx.boss();
+          e.act = pick(["melee", "melee", "blind", "king", "spider", "pounce", "cowboy", "summon"]);
+          e.st = "wind"; e.stt = e.act === "melee" ? 0.65 : 0.9; e.tx = P.x; e.ty = P.y;
+        }
+      } else if (e.st === "wind") {
+        if (e.stt > 0.25) { e.tx = P.x; e.ty = P.y; const gx = P.x - e.x, gy = P.y - (e.y - 60), gl = Math.hypot(gx, gy) || 1; e.aimx = gx / gl; e.aimy = gy / gl; }
+        if (e.stt <= 0) {
+          if (e.act === "melee") { e.st = "lunge"; e.stt = 0.28; }
+          else { shadowAct(e, rage); e.st = "chase"; e.stt = 0; e.tpT = 8; }
+        }
+      } else if (e.st === "lunge") {
+        const rem = Math.max(e.stt, 0.04); vx = clamp((e.tx - e.x) / rem, -1100, 1100); vy = clamp((e.ty - e.y) / rem, -1100, 1100);
+        if (e.stt <= 0) {
+          RN.push({ x: e.x, y: e.y, r: 0, max: 150, sp: 520, dmg: 0, hit: new Set(), col: "200,40,70", visual: true });
+          shake = Math.max(shake, 10); burst(e.x, e.y, 20, "#ff2a3a", 240, 0.6); sfx.boom();
+          if (Math.hypot(P.x - e.x, P.y - e.y) < 165) { damagePlayer(stat().maxhp * 0.3 / DF.dmg); blindPlayer(5); }
+          e.st = "chase"; e.stt = 0; e.tpT = 8;
+        }
+      }
+    }
     const sm = e.slowT > 0 ? 0.5 : 1; e.x += (vx * sm + e.kx) * dt; e.y += (vy * sm + e.ky) * dt;
     e.kx *= Math.pow(0.003, dt); e.ky *= Math.pow(0.003, dt);
     pushOutOfZones(e);
     // far away? teleport back to ring
-    if (e.type !== "boss" && e.type !== "cowboy" && d > spawnRad() + 500) { const [x, y] = ringPos(spawnRad()); e.x = x; e.y = y; }
+    if (!isBig(e) && d > spawnRad() + 500) { const [x, y] = ringPos(spawnRad()); e.x = x; e.y = y; }
     // contact
     if (Math.hypot(P.x - e.x, P.y - e.y) < e.r + 12) {
       if (e.type === "bomber") { e.dead = true; explode(e.x, e.y, 95, 40, true); }
-      else damagePlayer(e.dmg);
+      else if (e.st !== "fade") damagePlayer(e.dmg);
     }
   }
 
   // player shots
   for (const s of S) {
-    if (s.k === "bolt" || s.k === "arcaneKnife") {
+    if (s.k === "bolt") {
       if (s.home) {
         const tg = nearest(s.x, s.y, 420);
         if (tg) {
@@ -1136,7 +1267,7 @@ function update(dt) {
         if (e.dead || s.hit.has(e)) continue;
         const dx = e.x - s.x, dy = e.y - s.y;
         if (dx * dx + dy * dy < (e.r + s.r) ** 2) {
-          s.hit.add(e); dmgEnemy(e, s.refl && (e.type === "boss" || e.type === "cowboy") ? Math.min(s.dmg, e.maxhp * 0.002) : s.dmg, s.vx, s.vy, 150, !!s.refl); if (s.ice) e.slowT = 2;
+          s.hit.add(e); dmgEnemy(e, s.refl && (isBig(e)) ? Math.min(s.dmg, e.maxhp * 0.002) : s.dmg, s.vx, s.vy, 150, !!s.refl); if (s.ice) e.slowT = 2;
           burst(s.x, s.y, 3, "#cbb8ff", 90, 0.25);
           if (s.pierce-- <= 0) { s.life = 0; break; }
         }
@@ -1229,10 +1360,10 @@ function updateFx(dt) {
 }
 
 /* ================= drawing ================= */
-let camX = 0, camY = 0;
+let camX = 0, camY = 0, viewZ = 1;
 function drawGround() {
-  const ts = 80, x0 = Math.floor((camX - W / 2) / ts) - 1, x1 = Math.floor((camX + W / 2) / ts) + 1;
-  const y0 = Math.floor((camY - H / 2) / ts) - 1, y1 = Math.floor((camY + H / 2) / ts) + 1;
+  const ts = 80, x0 = Math.floor((camX - W / 2 / viewZ) / ts) - 1, x1 = Math.floor((camX + W / 2 / viewZ) / ts) + 1;
+  const y0 = Math.floor((camY - H / 2 / viewZ) / ts) - 1, y1 = Math.floor((camY + H / 2 / viewZ) / ts) + 1;
   for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
     ctx.fillStyle = ((tx + ty) & 1) ? "#2b4a3a" : "#2f5240";
     ctx.fillRect(tx * ts, ty * ts, ts + 1, ts + 1);
@@ -1249,7 +1380,7 @@ function drawGround() {
     }
   }
 }
-const vis = (x, y, m = 60) => Math.abs(x - camX) < W / 2 + m && Math.abs(y - camY) < H / 2 + m;
+const vis = (x, y, m = 60) => { const f = viewZ; return Math.abs(x - camX) < W / 2 / f + m && Math.abs(y - camY) < H / 2 / f + m; };
 function shadow(x, y, rx) { ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.beginPath(); ctx.ellipse(x, y, rx, rx * 0.4, 0, 0, TAU); ctx.fill(); }
 function eyes(x, y, sp, ex, ey, look, big) {
   const dx = P.x - x, dy = P.y - y, L = Math.hypot(dx, dy) || 1, px = dx / L * look, py = dy / L * look;
@@ -1350,16 +1481,14 @@ function drawEnemy(e) {
         ctx.fillStyle = "#e8ffe8"; ctx.fillRect(x - 1.2, y + 4, 2.4, 7); ctx.fillRect(x - 3.6, y + 6.4, 7.2, 2.4);
       }
       break; }
-    case "orbshooter": {
+    case "knifer": {
       const ang = Math.atan2(P.y - y, P.x - x), hx = Math.cos(ang), hy = Math.sin(ang);
-      ctx.fillStyle = fl ? "#fff" : "#253d59"; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+      ctx.fillStyle = fl ? "#fff" : "#3a3a4a"; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
       if (!fl) {
-        ctx.save(); ctx.shadowColor = "#65dcff"; ctx.shadowBlur = 14;
-        const ox = x + hx * 15, oy = y + hy * 15;
-        const og = ctx.createRadialGradient(ox - 2, oy - 3, 1, ox, oy, 9);
-        og.addColorStop(0, "#fff"); og.addColorStop(.35, "#c9fbff"); og.addColorStop(1, "#36aee8");
-        ctx.fillStyle = og; ctx.beginPath(); ctx.arc(ox, oy, 8, 0, TAU); ctx.fill(); ctx.restore();
-        ctx.fillStyle = "#d8f7ff"; ctx.beginPath(); ctx.arc(x - 4, y - 3, 2, 0, TAU); ctx.arc(x + 4, y - 3, 2, 0, TAU); ctx.fill();
+        ctx.fillStyle = "#c83a3a"; ctx.fillRect(x - r * 0.9, y - 1, r * 1.8, r * 0.7);
+        ctx.fillStyle = "#f2d6b0"; ctx.fillRect(x - 6, y - 5, 12, 4); ctx.fillStyle = "#111"; ctx.fillRect(x - 4, y - 4, 2, 2); ctx.fillRect(x + 2, y - 4, 2, 2);
+        ctx.strokeStyle = "#6a4a2a"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x + hx * 8, y + hy * 8); ctx.lineTo(x + hx * 17, y + hy * 17); ctx.stroke();
+        ctx.strokeStyle = "#e8f4ff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x + hx * 17, y + hy * 17); ctx.lineTo(x + hx * 29, y + hy * 29); ctx.stroke();
       }
       break; }
     case "spiderling": {
@@ -1369,11 +1498,13 @@ function drawEnemy(e) {
       if (!fl) { ctx.fillStyle = "#ff4a4a"; ctx.fillRect(x - 3.5, y - 3, 2, 2); ctx.fillRect(x + 1.5, y - 3, 2, 2); }
       break; }
     case "cowboy": {
-      const rage = e.hp < e.maxhp * 0.5;
+      const rage = e.hp < e.maxhp * 0.5, V = e.v;
+      ctx.save(); if (e.sc) { ctx.translate(x, y); ctx.scale(e.sc, e.sc); ctx.translate(-x, -y); }
       if (e.st === "ptele") { const pu = 1 + Math.sin(e.t * 18) * 0.06; ctx.fillStyle = "rgba(255,70,70,.18)"; ctx.strokeStyle = "rgba(255,90,90,.75)"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(e.tx, e.ty, 120 * pu, 0, TAU); ctx.fill(); ctx.stroke(); }
       const lift = e.st === "pounce" ? -30 * Math.sin(Math.PI * clamp(1 - e.stt / 0.5, 0, 1)) : 0, yy = y + lift;
       if (e.st === "aim") { const aa = Math.atan2(e.aimy || 0, e.aimx || 1); ctx.strokeStyle = "rgba(255,60,40," + (0.35 + 0.35 * Math.sin(e.t * 34)) + ")"; ctx.lineWidth = 3; ctx.setLineDash([10, 8]); ctx.beginPath(); ctx.moveTo(x, yy - 44); ctx.lineTo(x + Math.cos(aa) * 760, yy - 44 + Math.sin(aa) * 760); ctx.stroke(); ctx.setLineDash([]); }
       // spider mount
+      if (V !== "cowboy") {
       ctx.strokeStyle = fl ? "#fff" : "#241532"; ctx.lineWidth = 8; ctx.lineCap = "round"; ctx.lineJoin = "round";
       for (let i = 0; i < 8; i++) {
         const sd = i < 4 ? -1 : 1, k = i % 4, ph = Math.sin(e.t * 9 + i * 1.7), by2 = (k - 1.5) * 16;
@@ -1387,8 +1518,11 @@ function drawEnemy(e) {
         ctx.fillStyle = rage ? "#ff4a4a" : "#ffe14a"; for (const [ox, oy2, rr] of [[-16, 6, 3.4], [16, 6, 3.4], [-9, 10, 2.8], [9, 10, 2.8]]) { ctx.beginPath(); ctx.arc(x + ox, yy + oy2, rr, 0, TAU); ctx.fill(); }
         ctx.fillStyle = "#6a3a1a"; ctx.beginPath(); ctx.ellipse(x, yy - 14, 17, 7, 0, 0, TAU); ctx.fill(); ctx.fillStyle = "#c83a3a"; ctx.fillRect(x - 15, yy - 16, 30, 4);
       }
+      }
       // cowboy rider
-      const cy = yy - 14, ang = Math.atan2(P.y - (cy - 30), P.x - x), face = Math.cos(ang) >= 0 ? 1 : -1;
+      const cy = yy - 14 + (V === "cowboy" ? 46 : 0), ang = Math.atan2(P.y - (cy - 30), P.x - x), face = Math.cos(ang) >= 0 ? 1 : -1;
+      if (V === "spider") { ctx.restore(); break; }
+      if (V === "cowboy") { ctx.strokeStyle = fl ? "#fff" : "#2a3a5a"; ctx.lineWidth = 11; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(x - 8, cy + 6); ctx.lineTo(x - 11, cy + 34); ctx.moveTo(x + 8, cy + 6); ctx.lineTo(x + 11, cy + 34); ctx.stroke(); }
       ctx.fillStyle = fl ? "#fff" : (rage ? "#a8341e" : "#8a5a30"); ctx.beginPath(); ctx.ellipse(x, cy - 14, 15, 19, 0, 0, TAU); ctx.fill();
       ctx.strokeStyle = fl ? "#fff" : "#2a3a5a"; ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(x - 8, cy - 2); ctx.lineTo(x - 22, cy + 6); ctx.moveTo(x + 8, cy - 2); ctx.lineTo(x + 22, cy + 6); ctx.stroke();
       if (!fl) {
@@ -1407,6 +1541,35 @@ function drawEnemy(e) {
       ctx.fillStyle = fl ? "#fff" : "#c8a064"; ctx.beginPath(); ctx.ellipse(x, cy - 52, 29, 7.5, 0, 0, TAU); ctx.fill();
       ctx.fillStyle = fl ? "#fff" : "#b88a4a"; ctx.beginPath(); ctx.moveTo(x - 14, cy - 53); ctx.quadraticCurveTo(x - 14, cy - 74, x, cy - 72); ctx.quadraticCurveTo(x + 14, cy - 74, x + 14, cy - 53); ctx.closePath(); ctx.fill();
       if (!fl) { ctx.fillStyle = "#5a2a14"; ctx.fillRect(x - 14, cy - 59, 28, 5.5); ctx.fillStyle = "#ffe14a"; ctx.fillRect(x - 3, cy - 59, 6, 5.5); }
+      ctx.restore();
+      break; }
+    case "shadow": {
+      const al = e.st === "fade" ? clamp(e.stt / 0.6, 0.12, 1) : 1, rage = e.hp < e.maxhp * 0.5, hh = 150;
+      ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.beginPath(); ctx.ellipse(x, y + r * 0.95, 56, 14, 0, 0, TAU); ctx.fill();
+      if (e.st === "wind" && e.act === "pounce") { const pu = 1 + Math.sin(e.t * 18) * 0.06; ctx.fillStyle = "rgba(160,50,255,.2)"; ctx.strokeStyle = "rgba(200,90,255,.8)"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(e.tx, e.ty, 120 * pu, 0, TAU); ctx.fill(); ctx.stroke(); }
+      if (e.st === "wind" && (e.act === "cowboy" || e.act === "melee")) { const aa = e.act === "melee" ? Math.atan2(e.ty - y, e.tx - x) : Math.atan2(e.aimy || 0, e.aimx || 1); ctx.strokeStyle = "rgba(255,50,70," + (0.35 + 0.35 * Math.sin(e.t * 34)) + ")"; ctx.lineWidth = e.act === "melee" ? 22 : 3; ctx.setLineDash(e.act === "melee" ? [] : [10, 8]); ctx.beginPath(); ctx.moveTo(x, y - (e.act === "melee" ? 0 : 60)); ctx.lineTo(x + Math.cos(aa) * (e.act === "melee" ? Math.hypot(e.tx - x, e.ty - y) : 760), y - (e.act === "melee" ? 0 : 60) + Math.sin(aa) * (e.act === "melee" ? Math.hypot(e.tx - x, e.ty - y) : 760)); ctx.stroke(); ctx.setLineDash([]); }
+      ctx.save(); ctx.globalAlpha = al;
+      const WISP = ["#6be36b", "#a77bff", "#ff7a4a", "#ffd84a", "#ff4a4a", "#6fdcae", "#dfe9ff", "#c8924a", "#b06be0", "#5fd080", "#7a7a8a", "#8a4a68"];
+      for (let i = 0; i < 12; i++) { const a = e.t * 1.2 + i * TAU / 12, rr = 52 + Math.sin(e.t * 2 + i * 1.7) * 12; ctx.fillStyle = WISP[i]; ctx.globalAlpha = al * 0.55; ctx.beginPath(); ctx.arc(x + Math.cos(a) * rr * 0.9, y - 28 + Math.sin(a) * rr * 1.5, 4 + (i % 3), 0, TAU); ctx.fill(); }
+      ctx.globalAlpha = al * (fl ? 1 : 0.97);
+      const sw = Math.sin(e.t * 3) * 6;
+      ctx.fillStyle = fl ? "#fff" : (rage ? "#150614" : "#07040d");
+      ctx.beginPath(); ctx.moveTo(x - 42, y + r);
+      for (let i = 0; i <= 8; i++) ctx.lineTo(x - 42 + i * 10.5, y + r + (i % 2 ? -14 : 4) + Math.sin(e.t * 5 + i) * 4);
+      ctx.lineTo(x + 36, y - 28); ctx.quadraticCurveTo(x + 32 + sw, y - 88, x + 13, y - hh * 0.72); ctx.quadraticCurveTo(x + sw, y - hh - 8, x - 13, y - hh * 0.72); ctx.quadraticCurveTo(x - 32 + sw, y - 88, x - 36, y - 28); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = fl ? "#fff" : "#07040d"; ctx.lineWidth = 9; ctx.lineCap = "round";
+      for (const sd of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + sd * 26, y - 70); ctx.quadraticCurveTo(x + sd * 62, y - 40 + Math.sin(e.t * 3 + sd) * 8, x + sd * 70, y + 20 + Math.sin(e.t * 4 + sd) * 10); ctx.stroke(); }
+      ctx.strokeStyle = "rgba(160,60,255,.35)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - 36, y - 28); ctx.quadraticCurveTo(x - 32 + sw, y - 88, x - 13, y - hh * 0.72); ctx.quadraticCurveTo(x + sw, y - hh - 8, x + 13, y - hh * 0.72); ctx.stroke();
+      if (!fl) {
+        const ey = y - hh * 0.62, pulse = 0.75 + 0.25 * Math.sin(e.t * 6), ew = rage ? 9 : 7;
+        for (const sd of [-1, 1]) {
+          const gx = ctx.createRadialGradient(x + sd * 9, ey, 1, x + sd * 9, ey, 22); gx.addColorStop(0, "rgba(255,40,50," + (0.8 * pulse) + ")"); gx.addColorStop(1, "rgba(255,40,50,0)");
+          ctx.fillStyle = gx; ctx.beginPath(); ctx.arc(x + sd * 9, ey, 22, 0, TAU); ctx.fill();
+          ctx.fillStyle = "#ff2a3a"; ctx.beginPath(); ctx.ellipse(x + sd * 9, ey, ew, ew * 0.55, sd * -0.35, 0, TAU); ctx.fill();
+          ctx.fillStyle = "#fff0f0"; ctx.beginPath(); ctx.ellipse(x + sd * 9, ey, ew * 0.4, ew * 0.22, sd * -0.35, 0, TAU); ctx.fill();
+        }
+      }
+      ctx.restore();
       break; }
     case "boss": {
       let ox = 0, oy = 0;
@@ -1428,13 +1591,13 @@ function drawEnemy(e) {
     const tag = e.trait === "armored" ? "🛡" : e.trait === "berserk" ? "⚔" : "➤";
     ctx.font = "11px " + FONT; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = e.trait === "armored" ? "#9fcaff" : e.trait === "berserk" ? "#ff8a8a" : "#ffe08a"; ctx.fillText(tag, x, y - r - 16);
   } else if (e.trait === "invisible" && Math.sin(e.t * 2.4) > 0.65) { ctx.font = "10px " + FONT; ctx.fillStyle = "#c9d7ff"; ctx.textAlign = "center"; ctx.fillText("GHOSTED", x, y - r - 12); }
-  if (e.type !== "boss" && e.type !== "cowboy" && e.hp < e.maxhp && e.type !== "bat" && e.type !== "spiderling") {
+  if (!isBig(e) && e.hp < e.maxhp && e.type !== "bat" && e.type !== "spiderling") {
     ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(x - r, y - r - 9, r * 2, 4);
     ctx.fillStyle = "#ff5a6e"; ctx.fillRect(x - r, y - r - 9, r * 2 * Math.max(0, e.hp / e.maxhp), 4);
   }
 }
 function drawCrosshair() {
-  if (!usingMouse || !wl.arcane || state !== "play" || paused) return;
+  if (!usingMouse || !wl.knives || state !== "play" || paused) return;
   const x = pointer.x, y = pointer.y; ctx.strokeStyle = "rgba(232,244,255,.85)"; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(x, y, 11, 0, TAU); ctx.moveTo(x - 17, y); ctx.lineTo(x - 6, y); ctx.moveTo(x + 6, y); ctx.lineTo(x + 17, y); ctx.moveTo(x, y - 17); ctx.lineTo(x, y - 6); ctx.moveTo(x, y + 6); ctx.lineTo(x, y + 17); ctx.stroke();
 }
@@ -1453,14 +1616,9 @@ function drawEShot(s) {
     ctx.fillStyle = "rgba(255,200,60,.25)"; ctx.fillRect(-36, -4, 36, 8); ctx.fillStyle = "rgba(255,240,150,.55)"; ctx.fillRect(-20, -2.5, 20, 5);
     ctx.fillStyle = "rgba(255,160,40,.4)"; ctx.beginPath(); ctx.arc(0, 0, 14, 0, TAU); ctx.fill(); ctx.fillStyle = "#fff6c0"; ctx.beginPath(); ctx.ellipse(0, 0, 9, 5, 0, 0, TAU); ctx.fill(); ctx.restore(); return;
   }
-  if (s.arcaneOrb) {
-    const pulse = 1 + Math.sin(time * 16 + s.x * 0.03) * 0.12;
-    ctx.save(); ctx.shadowColor = "#57dcff"; ctx.shadowBlur = 18;
-    ctx.fillStyle = "rgba(70,210,255,.24)"; ctx.beginPath(); ctx.arc(s.x, s.y, 15 * pulse, 0, TAU); ctx.fill();
-    const g = ctx.createRadialGradient(s.x - 3, s.y - 3, 1, s.x, s.y, 10 * pulse);
-    g.addColorStop(0, "#ffffff"); g.addColorStop(0.35, "#c9fbff"); g.addColorStop(1, "#36bce8");
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(s.x, s.y, 9 * pulse, 0, TAU); ctx.fill();
-    ctx.shadowBlur = 0; ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.beginPath(); ctx.arc(s.x - 3, s.y - 3, 2.2, 0, TAU); ctx.fill(); ctx.restore(); return;
+  if (s.knife) {
+    const an = Math.atan2(s.vy, s.vx) + time * 0; ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(an); ctx.fillStyle = "rgba(255,90,90,.25)"; ctx.fillRect(-14, -3, 12, 6);
+    ctx.fillStyle = "#e8f4ff"; ctx.beginPath(); ctx.moveTo(11, 0); ctx.lineTo(-5, -4); ctx.lineTo(-5, 4); ctx.closePath(); ctx.fill(); ctx.fillStyle = "#6a3a2a"; ctx.fillRect(-11, -2, 6, 4); ctx.restore(); return;
   }
   if (s.web) {
     ctx.save(); ctx.translate(s.x, s.y); ctx.strokeStyle = "rgba(235,225,255,.95)"; ctx.lineWidth = 1.5;
@@ -1496,11 +1654,14 @@ function drawPlayer() {
     const L = wl2, n = [0, 2, 3, 3, 4, 5][L], rad = 62 + 7 * L + (L >= 3 ? 8 : 0), sp = 2.6 + 0.35 * L;
     for (let i = 0; i < n; i++) {
       const a = time * sp + i * TAU / n, ox = x + Math.cos(a) * rad, oy = y + Math.sin(a) * rad, or = 11 + (L >= 3 ? 3 : 0);
-      const gr = ctx.createRadialGradient(ox - 3, oy - 4, 1, ox, oy, or + 7);
-      gr.addColorStop(0, "#ffffff"); gr.addColorStop(0.32, "#d9fbff"); gr.addColorStop(0.62, "#65dcff"); gr.addColorStop(1, "rgba(40,160,255,0)");
-      ctx.save(); ctx.shadowColor = "#65dcff"; ctx.shadowBlur = 14;
-      ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(ox, oy, or + 7, 0, TAU); ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.beginPath(); ctx.arc(ox - 3, oy - 4, 2.5, 0, TAU); ctx.fill(); ctx.restore();
+      if (acct.shop && acct.shop.orbit) {
+        ctx.save(); ctx.translate(ox, oy); ctx.rotate(a + Math.PI / 2); ctx.shadowColor = "#9feaff"; ctx.shadowBlur = 12;
+        ctx.fillStyle = "#dcefff"; ctx.beginPath(); ctx.moveTo(0, -17); ctx.lineTo(5, 7); ctx.lineTo(0, 4); ctx.lineTo(-5, 7); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#5b7895"; ctx.fillRect(-2, 5, 4, 8); ctx.restore();
+      } else {
+        const gr = ctx.createRadialGradient(ox, oy, 1, ox, oy, or + 6); gr.addColorStop(0, "#fff"); gr.addColorStop(0.5, "#6fe0ff"); gr.addColorStop(1, "rgba(80,180,255,0)");
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(ox, oy, or + 6, 0, TAU); ctx.fill();
+      }
     }
   }
   ctx.fillStyle = P.hurt > 0 ? "#fff" : hero.color; ctx.beginPath(); ctx.arc(x, y + bob - 2, 15, 0, TAU); ctx.fill();
@@ -1578,7 +1739,7 @@ function drawWorld() {
   }
   if (state !== "menu") { drawCompanions(); drawPlayer(); drawPlayerFx(); }
   for (const s of S) {
-    if (s.k === "arcaneKnife") { ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(Math.atan2(s.vy, s.vx)); ctx.shadowColor = "#d8e8ff"; ctx.shadowBlur = 8; ctx.fillStyle = "#eaf4ff"; ctx.strokeStyle = "#7899bd"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-5, -4); ctx.lineTo(-2, 0); ctx.lineTo(-5, 4); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle = "#9aa9bb"; ctx.fillRect(-10, -2, 5, 4); ctx.restore(); }
+    if (s.k === "bolt" && s.knife) { const an = Math.atan2(s.vy, s.vx); ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(an); ctx.fillStyle = "rgba(200,230,255,.3)"; ctx.fillRect(-16, -3, 14, 6); ctx.fillStyle = "#eaf6ff"; ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-5, -4); ctx.lineTo(-5, 4); ctx.closePath(); ctx.fill(); ctx.fillStyle = "#8a6a4a"; ctx.fillRect(-10, -2, 5, 4); ctx.restore(); }
     else if (s.k === "bolt") { ctx.fillStyle = s.glow || "rgba(160,120,255,.35)"; ctx.beginPath(); ctx.arc(s.x, s.y, 11, 0, TAU); ctx.fill(); ctx.fillStyle = s.col || "#fff"; ctx.beginPath(); ctx.arc(s.x, s.y, 5, 0, TAU); ctx.fill(); }
     else if (s.k === "blade") { ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.spin); ctx.shadowColor = "#72e8ff"; ctx.shadowBlur = 18; ctx.fillStyle = "#dffaff"; ctx.strokeStyle = "#4ccfff"; ctx.lineWidth = 4; ctx.beginPath(); for (let i = 0; i < 8; i++) { const a = i * TAU / 8, rr = i % 2 ? s.r * 0.35 : s.r * 1.35; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore(); }
     else if (s.k === "fire") { ctx.fillStyle = "rgba(255,120,40,.35)"; ctx.beginPath(); ctx.arc(s.x, s.y, 14, 0, TAU); ctx.fill(); ctx.fillStyle = "#ffb04a"; ctx.beginPath(); ctx.arc(s.x, s.y, 8, 0, TAU); ctx.fill(); ctx.fillStyle = "#fff3b0"; ctx.beginPath(); ctx.arc(s.x, s.y, 4, 0, TAU); ctx.fill(); }
@@ -1632,35 +1793,46 @@ function drawHUD() {
   ix += 8;
   for (const id in pl) { panel(ix, iy - 14, 34, 34, "rgba(15,22,32,.8)", "#6a8ca8"); ctx.font = "18px " + FONT; ctx.fillText(PDEF[id].icon, ix + 17, iy + 3); txt("" + pl[id], ix + 28, iy + 14, 10, "#cfe"); ix += 38; }
   // objectives + boss bars
-  const kcol = kingsKilled >= KINGS_NEEDED ? "#6bf0b0" : "#ffe14a", scol = cowboyDead ? "#6bf0b0" : "#c9a0ff";
   if (endless) { txt("♾ Kings " + kingsKilled + "   🤠 Cowboys " + cowboysKilled, W / 2, 64, 13, "#ffe14a", "center", 700); }
   else {
-  txt("👑 Kings " + Math.min(kingsKilled, KINGS_NEEDED) + "/" + KINGS_NEEDED, W / 2 - 66, 64, 13, kcol, "center", 700);
-  txt("🤠🕷 Boss " + (cowboyDead ? "✔" : "—"), W / 2 + 66, 64, 13, scol, "center", 700); }
+    const rn = reqNeeded();
+    txt(reqIcon() + " " + (stage === 1 ? "Kings" : stage === 2 ? "Scouts" : "Outlaws") + " " + Math.min(reqKilled, rn) + "/" + rn, W / 2 - 74, 64, 13, reqKilled >= rn ? "#6bf0b0" : "#ffe14a", "center", 700);
+    txt("☠ Final " + (finalDone ? "✔" : finalSpawned ? "…" : "—"), W / 2 + 74, 64, 13, finalDone ? "#6bf0b0" : "#c9a0ff", "center", 700);
+  }
   let hint = "";
-  if (boss && !boss.dead) hint = "☠ Slay the Slime King!";
-  else if (orbHeld.every(Boolean)) hint = settings.autoKing ? "🔮 All 3 orbs collected — Slime King auto-summoning" : "🔮 All 3 orbs collected — summon your Slime King!";
-  else if (!cowboyDead && cowboySpawned) hint = "🤠 Slay the Cowboy Spider!";
-  else if (kingsKilled < KINGS_NEEDED) hint = "🔮 Collect 3 king orbs (" + orbHeld.filter(Boolean).length + "/3) to summon the next King";
-  else if (!cowboyDead) hint = "🤠 The Cowboy Spider is next!";
-  if (hint) txt(hint, W / 2, 82, 12, "#ff9aa8", "center", 700);
-  const bl = E.filter(b => !b.dead && (b.type === "boss" || b.type === "cowboy")).slice(0, 3);
-  bl.forEach((b, i) => {
-    const bw = Math.min(520, W * 0.7), bx = W / 2 - bw / 2, by = 98 + i * 24;
-    ctx.fillStyle = "rgba(0,0,0,.6)"; ctx.fillRect(bx, by, bw, 16); ctx.fillStyle = b.type === "cowboy" ? "#e0a040" : "#ff4a63"; ctx.fillRect(bx, by, bw * clamp(b.hp / b.maxhp, 0, 1), 16);
-    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.strokeRect(bx, by, bw, 16); txt(b.type === "cowboy" ? "COWBOY SPIDER" : "SLIME KING", W / 2, by + 8, 11, "#fff");
+  if (!endless) {
+    if (finalSpawned && !finalDone) hint = "☠ Slay the final boss: " + finalNames();
+    else if (boss && !boss.dead) hint = "☠ Slay the " + bossLabel(boss).toLowerCase() + "!";
+    else if (orbHeld.every(Boolean) && !finalSpawned) hint = settings.autoKing ? "🔮 All 3 orbs collected — auto-summoning" : "🔮 All 3 orbs collected — summon your boss!";
+    else if (!finalSpawned) hint = "🔮 Collect 3 orbs (" + orbHeld.filter(Boolean).length + "/3) to summon the next " + (stage === 1 ? "King" : stage === 2 ? "Spider Scout" : "Outlaw");
+  } else {
+    if (boss && !boss.dead) hint = "☠ Slay the Slime King!";
+    else if (orbHeld.every(Boolean)) hint = settings.autoKing ? "🔮 All 3 orbs collected — Slime King auto-summoning" : "🔮 All 3 orbs collected — summon your Slime King!";
+    else hint = "🔮 Collect 3 king orbs (" + orbHeld.filter(Boolean).length + "/3) to summon the next King";
+  }
+  if (hint) txt(hint, W / 2, 82, Math.min(12, W / 30), "#ff9aa8", "center", 700);
+  const bl = E.filter(b => !b.dead && isBig(b)).sort((a, b) => (b.type === "shadow") - (a.type === "shadow")).slice(0, 4);
+  let byy = 98;
+  bl.forEach(b => {
+    const sh = b.type === "shadow", bw = sh ? Math.min(640, W - 24) : Math.min(520, W * 0.7), bh = sh ? 24 : 16, bx = W / 2 - bw / 2, by = byy; byy += bh + 8;
+    ctx.fillStyle = "rgba(0,0,0,.65)"; ctx.fillRect(bx, by, bw, bh);
+    if (sh) { const gr = ctx.createLinearGradient(bx, 0, bx + bw, 0); gr.addColorStop(0, "#5a1a8a"); gr.addColorStop(1, "#ff2a4a"); ctx.fillStyle = gr; }
+    else ctx.fillStyle = b.type === "cowboy" ? "#e0a040" : "#ff4a63";
+    ctx.fillRect(bx, by, bw * clamp(b.hp / b.maxhp, 0, 1), bh);
+    ctx.strokeStyle = sh ? "#ff6a7a" : "#fff"; ctx.lineWidth = sh ? 3 : 2; ctx.strokeRect(bx, by, bw, bh);
+    txt(bossLabel(b) + (sh ? "  " + Math.max(0, Math.ceil(b.hp / b.maxhp * 100)) + "%" : ""), W / 2, by + bh / 2, sh ? 13 : 11, "#fff");
   });
   if (banner) { ctx.globalAlpha = clamp(banner.life, 0, 1); txt(banner.text, W / 2, H * 0.26, Math.max(12, Math.min(36, W / 16, (W - 24) / (banner.text.length * 0.56))), banner.color); ctx.globalAlpha = 1; }
   if (gemCombo >= 6) txt("x" + gemCombo, W - 14, 108, 16, "#6bf0b0", "right");
   for (let c = 0; c < 3; c++) { const ox = 22 + c * 26, oy = 90, got = orbHeld[c]; ctx.fillStyle = got ? ORB_COL[c] : "rgba(15,22,32,.8)"; ctx.beginPath(); ctx.arc(ox, oy, 9, 0, TAU); ctx.fill(); ctx.strokeStyle = got ? "#fff" : ORB_COL[c] + "99"; ctx.lineWidth = got ? 3 : 2; ctx.stroke(); if (got) { ctx.strokeStyle = ORB_COL[c] + "66"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(ox, oy, 13, 0, TAU); ctx.stroke(); } }
   txt("King orbs", 100, 90, 11, "#9fb4c6", "left", 700);
-  const summonReady = orbHeld.every(Boolean) && !(boss && !boss.dead);
+  const summonReady = orbHeld.every(Boolean) && !(boss && !boss.dead) && (endless || !finalSpawned);
   const sbx = 14, sby = 116, sbw = 148, sbh = 30;
   panel(sbx, sby, sbw, sbh, summonReady ? "rgba(95,160,90,.95)" : "rgba(15,22,32,.72)", summonReady ? "#baff9a" : "#587064");
   txt(summonReady ? "👑 SUMMON KING [K]" : "👑 SUMMON " + orbHeld.filter(Boolean).length + "/3", sbx + sbw / 2, sby + sbh / 2, 11, summonReady ? "#fff" : "#8da69a");
   rects.push({ x: sbx, y: sby, w: sbw, h: sbh, fn: summonKing });
   // Manual special-ability controls: these stay visible in the HUD and mirror R / M.
-  const actionY = H - 112, actionW = Math.min(124, Math.max(92, (W - 42) / 2)), actionH = 30;
+  const nAct = (hasComp("Rad") ? 1 : 0) + (wl.meteor ? 1 : 0) + (wl.blade ? 1 : 0), actionY = usingTouch ? H - 206 : H - 112, actionW = Math.min(124, Math.max(70, (W - 28 - 8 * Math.max(0, nAct - 1)) / Math.max(1, nAct))), actionH = 30;
   let actionX = 14;
   if (hasComp("Rad")) {
     const radReady = !paused && P.rdCD <= 0 && P.hp >= 6;
@@ -1676,11 +1848,18 @@ function drawHUD() {
     panel(actionX, actionY, actionW, actionH, meteorReady ? "rgba(157,76,39,.96)" : "rgba(15,22,32,.82)", meteorReady ? "#ffb17a" : "#9a725f");
     txt(meteorLabel, actionX + actionW / 2, actionY + actionH / 2, 11, meteorReady ? "#fff" : "#c9a99a", "center", 700);
     rects.push({ x: actionX, y: actionY, w: actionW, h: actionH, fn: triggerMeteor });
+    actionX += actionW + 8;
+  }
+  if (wl.blade) {
+    const bladeReady = !paused && (cd.blade || 0) <= 0, bladeLabel = paused ? "⚔ BLADE [B]" : (cd.blade || 0) > 0 ? "⚔ BLADE " + Math.ceil(cd.blade) + "s" : "⚔ BLADE [B]";
+    panel(actionX, actionY, actionW, actionH, bladeReady ? "rgba(30,110,140,.96)" : "rgba(15,22,32,.82)", bladeReady ? "#8feaff" : "#5f8a9a");
+    txt(bladeLabel, actionX + actionW / 2, actionY + actionH / 2, 11, bladeReady ? "#fff" : "#9ab8c4", "center", 700);
+    rects.push({ x: actionX, y: actionY, w: actionW, h: actionH, fn: triggerBlade });
   }
   if (SZ.length) txt("🛡 Safe zone " + Math.ceil(SZ[0].life) + "s", 14, 154, 12, "#9fe6ff", "left", 700);
   if (time < 9) { ctx.globalAlpha = clamp(9 - time, 0, 1);
-    const hint1 = usingTouch ? "Drag anywhere to move  ·  tap the round buttons" : "WASD / arrows to move  ·  aim with the mouse" + (wl.arcane ? " (knives)" : "");
-    const hint2 = usingTouch ? (hero.ab ? "Big button: " + hero.ab.name + "  ·  🛡 deflect  ·  🏃 sprint" : "🛡 deflect  ·  🏃 sprint") : (hero.ab ? "SPACE: " + hero.ab.name : "Your weapons auto-fire") + "   SHIFT: sprint   F: deflect";
+    const hint1 = usingTouch ? "Drag anywhere to move  ·  tap the round buttons" : "WASD / arrows to move  ·  aim with the mouse" + (wl.knives ? " (knives)" : "");
+    const hint2 = usingTouch ? (hero.ab ? "Big button: " + hero.ab.name + "  ·  🛡 deflect  ·  🏃 sprint" : "🛡 deflect  ·  🏃 sprint") : (hero.ab ? "SPACE: " + hero.ab.name : "Orbs guard you") + "   SHIFT: sprint   F: deflect";
     const hy = usingTouch ? H * 0.7 : H - 112; txt(hint1, W / 2, hy, Math.min(16, W / 24), "#fff", "center", 700); txt(hint2, W / 2, hy + 24, Math.min(16, W / 24), "#fff", "center", 700); ctx.globalAlpha = 1; }
   if (state === "play" && !paused) {
     const bx = W - 30, by = 76, hov = pointer.x >= bx - 18 && pointer.x <= bx + 18 && pointer.y >= by - 18 && pointer.y <= by + 18;
@@ -1748,6 +1927,7 @@ function drawCompanions() {
     const bob = Math.sin(time * 5 + c.t) * 3, k = c.def.kind, down = k === "tank" && c.hp <= 0;
     if (k === "slow") { ctx.strokeStyle = "rgba(95,224,192,.28)"; ctx.lineWidth = 3; ctx.setLineDash([10, 8]); ctx.lineDashOffset = -time * 20; ctx.beginPath(); ctx.arc(c.x, c.y, 150, 0, TAU); ctx.stroke(); ctx.setLineDash([]); }
     if (k === "grabber") { ctx.strokeStyle = "rgba(255,155,216,.5)"; ctx.lineWidth = 2; ctx.setLineDash([5, 5]); ctx.beginPath(); ctx.arc(c.x, c.y, 24 + Math.sin(time * 5) * 2, 0, TAU); ctx.stroke(); ctx.setLineDash([]); }
+    if (k === "tunnel") { ctx.strokeStyle = "rgba(255,120,120,.45)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c.x, c.y, 24 + Math.sin(time * 4) * 3, 0, TAU); ctx.stroke(); ctx.fillStyle = "#ff4a4a"; ctx.beginPath(); ctx.arc(c.x, c.y - 6, 3, 0, TAU); ctx.fill(); }
     if (k === "dmgaura" || k === "xpaura") { ctx.strokeStyle = k === "dmgaura" ? "rgba(240,150,255,.4)" : "rgba(255,200,60,.4)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c.x, c.y, 26 + Math.sin(time * 4) * 3, 0, TAU); ctx.stroke(); }
     if (k === "cleric") {
       ctx.strokeStyle = "rgba(255,240,150,.3)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c.x, c.y + bob - 2, 24 + Math.sin(time * 3) * 2, 0, TAU); ctx.stroke();
@@ -1795,7 +1975,7 @@ function drawMedkit(g, bob) {
 function drawMedArrows() {
   for (const g of G) {
     if (g.t !== "medkit") continue;
-    const dx = g.x - camX, dy = g.y - camY;
+    const dx = (g.x - camX) * settings.fov, dy = (g.y - camY) * settings.fov;
     if (Math.abs(dx) < W / 2 - 30 && Math.abs(dy) < H / 2 - 30) continue;
     const k = Math.min((W / 2 - 34) / (Math.abs(dx) || 1), (H / 2 - 34) / (Math.abs(dy) || 1));
     ctx.save(); ctx.translate(W / 2 + dx * k, H / 2 + dy * k);
@@ -1929,7 +2109,7 @@ function drawMenu() {
   const ts = clamp(W / 9, 34, 64);
   txt("Slime Siege", W / 2, y + ts / 2 + Math.sin(menuT * 2) * 3, ts, "#6bf0b0"); y += ts + 6;
   txt(endless ? "Endless: no win, no time limit. See how long you can last." : "Pick a wizard and difficulty. Each run lasts a random 5–10 minutes.", W / 2, y + 6, clamp(W / 34, 11, 16), "#d8e6f2", "center", 600);
-  txt(endless ? "A King every 2:30; every 3rd King summons the Cowboy Spider." : "To win: slay 3 Slime Kings — the 3rd summons the Cowboy Spider — then slay it.", W / 2, y + 26, clamp(W / 38, 11, 14), "#ffb0b8", "center", 700); y += 46;
+  txt(endless ? "A King every 2:30; every 3rd King summons the Cowboy Spider." : "Win: slay " + reqNeeded() + " " + reqName() + ", then " + (finalPlan().length > 2 ? "ALL final bosses" : finalNames()), W / 2, y + 26, clamp(W / 38, 11, 14), "#ffb0b8", "center", 700); y += 46;
   { const ai = acctInfo(), ph2 = 62; panel(x0, y, colW, ph2, "rgba(15,22,32,.9)", "#c9a8ff");
     txt("⭐ Wizard Level " + ai.lvl, x0 + 16, y + 17, 16, "#fff", "left");
     txt("🔮 " + acct.slimency + " Orbs", x0 + colW - 16, y + 17, 13, "#ffd23f", "right", 700);
@@ -1951,7 +2131,7 @@ function drawMenu() {
     y += 4;
   }
   txt("MODE", x0, y + 6, 13, "#ffd23f", "left"); y += 22;
-  [["🏁 Standard", "5–10 min · slay 3 Kings + Cowboy Spider", false], ["♾ Endless", "No limit · survive forever", true]].forEach(([nm, ds, en], i) => {
+  [["🏁 Standard", "5–10 min · slay the stage bosses + final boss", false], ["♾ Endless", "No limit · survive forever", true]].forEach(([nm, ds, en], i) => {
     const mw = (colW - gap) / 2, x = x0 + i * (mw + gap), sel = endless === en, hov = inside(x, y, mw, 50);
     panel(x, y, mw, 50, sel ? "rgba(107,240,176,.18)" : hov ? "rgba(34,50,70,.95)" : "rgba(15,22,32,.9)", sel ? "#6bf0b0" : hov ? "#fff" : "#3b5268");
     txt(nm, x + mw / 2, y + 18, Math.min(17, mw / 9), sel ? "#fff" : "#9fe6c0"); txt(ds, x + mw / 2, y + 38, Math.min(11, mw / 17), "#9fb4c6", "center", 600);
@@ -2046,14 +2226,14 @@ function drawUpgradeScreen() {
 function drawWizardUpgradeScreen() { upgradeTab = "wizards"; drawUpgradeScreen(); }
 
 const SHOP_ITEMS = [
-  { id: "orbit", name: "Orbiting Orbs", icon: "🔮", cost: 8, desc: "A ring of glowing orbs protects you" },
-  { id: "bolt", name: "Magic Bolt", icon: "✨", cost: 5, desc: "Fire magical bolts at nearby enemies" },
-  { id: "zap", name: "Lightning", icon: "⚡", cost: 8, desc: "Strike enemies with lightning" },
-  { id: "nova", name: "Shock Nova", icon: "💥", cost: 10, desc: "Pulse blasts around you" },
-  { id: "arcane", name: "Throwing Knives", icon: "🗡️", cost: 12, desc: "Throw a fan of piercing knives forward" },
-  { id: "boom", name: "Boomerang", icon: "🌀", cost: 14, desc: "Launch returning blades" },
-  { id: "flame", name: "Flame Trail", icon: "🔥", cost: 16, desc: "Leave a damaging fire trail" },
-  { id: "meteor", name: "Meteor Storm", icon: "☄️", cost: 20, desc: "Press M to call down a meteor" },
+  { id: "orbit", name: "Orbiting Blades", icon: "🗡️", cost: 20, desc: "A ring of spinning knives protects you" },
+  { id: "bolt", name: "Magic Bolt", icon: "✨", cost: 20, desc: "Fire magical bolts at nearby enemies" },
+  { id: "zap", name: "Lightning", icon: "⚡", cost: 25, desc: "Strike enemies with lightning" },
+  { id: "nova", name: "Shock Nova", icon: "💥", cost: 30, desc: "Pulse blasts around you" },
+  { id: "knives", name: "Throwing Knives", icon: "🔪", cost: 35, desc: "Throw piercing knives forward" },
+  { id: "boom", name: "Boomerang", icon: "🌀", cost: 40, desc: "Launch returning blades" },
+  { id: "flame", name: "Flame Trail", icon: "🔥", cost: 50, desc: "Leave a damaging fire trail" },
+  { id: "meteor", name: "Meteor Storm", icon: "☄️", cost: 60, desc: "Press M to call down a meteor" },
 ];
 function buyShopItem(item) {
   if (acct.shop[item.id]) return;
@@ -2095,11 +2275,16 @@ function drawSettingsScreen() {
     panel(x, y, pw, 50, "rgba(15,22,32,.8)", "#3b5268");
     txt("Full reset unlocks after clearing Stage 3 · Hard", W / 2, y + 25, 12, "#9fb4c6"); y += 62;
   }
-  panel(x, y, pw, 88, "rgba(15,22,32,.95)", "#3b5268");
-  txt("CHANGELOG · v1.54", x + 16, y + 18, 13, "#ffd23f", "left");
-  txt("• Changed Arcane Orbs back to Throwing Knives", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
-  txt("• Orbiting Orbs remain unchanged; no other weapons use knives", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
-  txt("• Rift Blade, manual Meteor (M), enemy mutations and the Upgrade Workshop", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600); y += 98;
+  { const bw2 = (pw - 8) / 2;
+    button(x, y, bw2, 36, "⬇ Export save", exportSave, "#9fe6ff", 12); button(x + bw2 + 8, y, bw2, 36, "⬆ Import save", importSave, "#ffd23f", 12); y += 44;
+    txt("💾 Auto-saves every 10 seconds in this browser", W / 2, y + 4, 10.5, "#9fb4c6", "center", 600); y += 18; }
+  panel(x, y, pw, 124, "rgba(15,22,32,.95)", "#3b5268");
+  txt("CHANGELOG · v1.55", x + 16, y + 18, 13, "#ffd23f", "left");
+  txt("• Rift Blade is manual: press B or tap the BLADE button", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
+  txt("• Final bosses per stage; new ShadowCaster (stage 3)", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
+  txt("• Oculus wizard (Lv 35) · permanent shop from 20 Orbs", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
+  txt("• Autosave every 10s · export / import save file", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
+  txt("• Mobile: buttons resize to fit", x + 16, y + 111, 10.5, "#d8e6f2", "left", 600); y += 134;
   button(W / 2 - 100, Math.min(H - 52, y + 4), 200, 40, "‹  Back", closeSettings, "#6bf0b0", 15);
 }
 function drawShopScreen() {
@@ -2171,7 +2356,7 @@ function drawEnd(win) {
   const L = (a, b, col = "#fff") => { txt(a, x + 40, ly, 17, "#9fb4c6", "left", 600); txt(b, x + pw - 40, ly, 20, col, "right"); ly += 30; };
   L("Time", endless ? fmt(time) : fmt(time) + " / " + fmt(WIN_TIME)); L("Slain", String(kills));
   if (endless) { L("Slime Kings slain", String(kingsKilled)); L("Cowboys slain", String(cowboysKilled)); }
-  else { L("Slime Kings", kingsKilled + " / " + KINGS_NEEDED, kingsKilled >= KINGS_NEEDED ? "#6bf0b0" : "#fff"); L("Cowboy Spider", cowboyDead ? "Slain" : (cowboySpawned ? "Alive" : "Unseen"), cowboyDead ? "#6bf0b0" : "#fff"); } L("Level", String(level)); L("Wizard", hero.name + (CP.length ? "  +" + CP.length : ""));
+  else { L(reqName(), Math.min(reqKilled, reqNeeded()) + " / " + reqNeeded(), reqKilled >= reqNeeded() ? "#6bf0b0" : "#fff"); L("Final boss", finalDone ? "Slain" : (finalSpawned ? "Alive" : "Unseen"), finalDone ? "#6bf0b0" : "#fff"); } L("Level", String(level)); L("Wizard", hero.name + (CP.length ? "  +" + CP.length : ""));
   if (run.absorbed > 0) L("Damage tanked", String(Math.round(run.absorbed)), "#9ccaff");
   if (run.healed > 0) L("Healed by Lumen", String(Math.round(run.healed)), "#fff2a0");
   if (lastGain) {
@@ -2187,6 +2372,14 @@ function drawEnd(win) {
   if (overT > 0.8) { const bw = (pw - 90) / 2, by = y + ph - 62; button(x + 30, by, bw, 44, "▶  Play again", startFromMenu, "#6bf0b0"); button(x + 60 + bw, by, bw, 44, "☰  Menu", toMenu, "#9fb4c6"); }
 }
 
+function drawBlind() {
+  if (!(blindA > 0) || state === "menu") return;
+  const tun = hasComp("Oculus"), r0 = tun ? Math.max(190, Math.min(W, H) * 0.3) : 54, cx = W / 2, cy = H / 2;
+  const g = ctx.createRadialGradient(cx, cy, r0 * 0.55, cx, cy, r0 * 1.25);
+  g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0," + (tun ? 0.97 : 0.995) + ")");
+  ctx.globalAlpha = blindA; ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1;
+  if (blindT > 0 && blindT < 5.1 && !tun) txt("👁 " + Math.ceil(blindT) + "s", W / 2, H / 2 - 74, 16, "#ff9aa8");
+}
 function render() {
   ctx.fillStyle = "#2b4a3a"; ctx.fillRect(0, 0, W, H);
   rects = []; uiLock = false;
@@ -2195,14 +2388,15 @@ function render() {
   else if (P) { camX = P.x; camY = P.y; }
   ctx.save();
   const sx = shake > 0 ? rnd(-shake, shake) * 0.6 : 0, sy = shake > 0 ? rnd(-shake, shake) * 0.6 : 0;
-  ctx.translate(Math.round(W / 2 - camX + sx), Math.round(H / 2 - camY + sy));
-  if (!inMenu) ctx.scale(settings.fov, settings.fov);
+  ctx.translate(Math.round(W / 2 + sx), Math.round(H / 2 + sy));
+  viewZ = inMenu ? 1 : settings.fov; ctx.scale(viewZ, viewZ);
+  ctx.translate(-camX, -camY);
   if (inMenu) drawGround(); else drawWorld();
   ctx.restore();
   if (freeze > 0 && !inMenu) { ctx.fillStyle = `rgba(90,170,255,${0.12 + 0.05 * Math.sin(time * 10)})`; ctx.fillRect(0, 0, W, H); }
   if (inMenu) { if (state === "companions") drawCompanionScreen(); else if (state === "upgrades" || state === "wizardUpgrades") drawUpgradeScreen(); else if (state === "settings") drawSettingsScreen(); else if (state === "shop") drawShopScreen(); else if (state === "resetConfirm1") drawResetConfirm(1); else if (state === "resetConfirm2") drawResetConfirm(2); else drawMenu(); }
   else {
-    drawScreenFx(); drawHUD(); drawAbility(); drawDeflectBtn(); drawSprintBtn(); drawCrosshair(); drawCompHud(); drawMedArrows(); drawZoneArrows();
+    drawBlind(); drawScreenFx(); drawHUD(); drawAbility(); drawDeflectBtn(); drawSprintBtn(); drawCrosshair(); drawCompHud(); drawMedArrows(); drawZoneArrows();
     if (state === "level") drawLevel();
     if (state === "recruit") drawRecruit();
     if (paused && state === "play") drawPause();
@@ -2213,6 +2407,7 @@ function render() {
   const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.hypot(W, H) * 0.6);
   g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,.4)"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   if (P && P.hurt > 0 && state === "play") { ctx.fillStyle = `rgba(255,40,60,${P.hurt * 0.8})`; ctx.fillRect(0, 0, W, H); }
+  if (savedFlash > 0) { ctx.globalAlpha = clamp(savedFlash, 0, 1) * 0.8; txt("💾 Saved", 10, H - 12, 11, "#9fe6c0", "left", 700); ctx.globalAlpha = 1; }
 }
 
 /* ================= input ================= */
@@ -2231,6 +2426,7 @@ addEventListener("keydown", e => {
       if (c === "KeyF" && !paused) deflect();
       if (c === "KeyR" && !paused && hasComp("Rad")) meltdown("Rad");
       if (c === "KeyM" && !paused && wl.meteor) triggerMeteor();
+      if (c === "KeyB" && !paused && wl.blade) triggerBlade();
       if (c === "KeyK" && !paused) summonKing();
       if (c === "KeyP" || c === "Escape") paused = !paused;
     } else if (state === "menu") {
@@ -2297,12 +2493,47 @@ cv.addEventListener("wheel", e => { const so = scrollObj(); if (so) { so.s = cla
 /* ================= loop ================= */
 let last = performance.now();
 function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000); last = now; menuT += dt;
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; menuT += dt; if (savedFlash > 0) savedFlash -= dt;
   if (state === "play" && !paused) { update(dt); updateFx(dt); }
   else if (state === "over" || state === "win") { overT += dt; if (shake > 0) shake = Math.max(0, shake - dt * 28); updateFx(dt); }
   render();
   requestAnimationFrame(frame);
 }
+function saveAll() {
+  if (noSave) return;
+  try {
+    localStorage.setItem("slimesiege_acct", JSON.stringify(acct)); localStorage.setItem("slimesiege_settings", JSON.stringify(settings));
+    localStorage.setItem("slimesiege_best3", JSON.stringify(bests)); localStorage.setItem("slimesiege_sel", JSON.stringify({ m: selMain, c: selComp, d: diffIdx, s: stage, e: endless }));
+    savedFlash = 1.6;
+  } catch (e) {}
+}
+function exportSave() {
+  saveAll();
+  try {
+    const data = { game: "Slime Siege", version: VERSION, acct, settings, bests, sel: { m: selMain, c: selComp, d: diffIdx, s: stage, e: endless } };
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: "application/json" })); a.download = "slime-siege-save.json";
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  } catch (e) {}
+}
+function importSave() {
+  const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json,.json";
+  inp.onchange = () => {
+    const f = inp.files && inp.files[0]; if (!f) return;
+    f.text().then(t => {
+      try {
+        const d = JSON.parse(t); if (!d || !d.acct) return;
+        noSave = true;
+        localStorage.setItem("slimesiege_acct", JSON.stringify(d.acct)); if (d.bests) localStorage.setItem("slimesiege_best3", JSON.stringify(d.bests));
+        if (d.settings) localStorage.setItem("slimesiege_settings", JSON.stringify(d.settings)); if (d.sel) localStorage.setItem("slimesiege_sel", JSON.stringify(d.sel));
+        location.reload();
+      } catch (e) { noSave = false; }
+    });
+  };
+  inp.click();
+}
+setInterval(saveAll, 10000);
+addEventListener("pagehide", saveAll);
+document.addEventListener("visibilitychange", () => { if (document.hidden) saveAll(); });
 requestAnimationFrame(frame);
 })();
 </script>
