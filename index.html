@@ -18,7 +18,8 @@
 <script>
 (() => {
 "use strict";
-const VERSION = "v1.56"; // Orbiting knives replaced by orbs; stage final bosses, ShadowCaster, FOV fix
+// Versioning: MAJOR.MINOR.PATCH (major = big changes, minor = small features/changes, patch = bug fixes)
+const VERSION = "v1.7.0"; // Stage unlock + stage intro animations, Save Data screen
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -96,7 +97,7 @@ const WDEF = {
   flame: { name: "Flame Trail", icon: "🔥", d: ["", "Leave burning fire behind you", "Bigger, longer fire", "Burns harder", "Fire lasts longer", "Inferno trail"] },
   meteor: { name: "Meteor Storm", icon: "☄️", d: ["", "Every 30s a meteor hits — the sky burns red for 15s, hurting everything", "Harder crash & burn", "Bigger crater", "Burns even hotter", "Apocalypse"] },
   boom:  { name: "Boomerang", icon: "🌀", d: ["", "Throws a returning blade", "More damage", "+1 blade", "Bigger blades", "+1 blade"] },
-  blade: { name: "Rift Blade", icon: "⚔️", d: ["", "Rare boost: press B (or tap the button) to launch a spinning blade forward, leaving each enemy hit at 25% health"] },
+  blade: { name: "Rift Blade", icon: "⚔️", d: ["", "Rare boost: press B (or tap the button): a giant red blade ring spirals outward in all directions, leaving each enemy hit at 25% health (bosses take 6% max HP)"] },
 };
 const PDEF = {
   might:  { name: "Might", icon: "💪", d: "+18% damage" },
@@ -160,7 +161,7 @@ let WIN_TIME = 300, PACE = 1.47;
 const RARE_WEAPON_CHANCE = { meteor: 0.05, flame: 0.12, boom: 0.12, knives: 0.12, blade: 0.025 };
 const ORB_COL = ["#2fa8ff", "#ff3a4a", "#ffd23f"], ORB_NAME = ["Blue", "Red", "Yellow"], ORB_CHANCE = [0.05, 0.075, 0.10], COWBOY_BULLET = 0.5;
 const BASE_SLOTS = 2, MAX_COMP = 5, KINGS_NEEDED = 3;
-let reqKilled = 0, finalSpawned = false, finalDone = false, blindT = 0, blindA = 0, savedFlash = 0, noSave = false;
+let stageIntroT = 0, reqKilled = 0, finalSpawned = false, finalDone = false, blindT = 0, blindA = 0, savedFlash = 0, noSave = false;
 const isBig = e => e.type === "boss" || e.type === "cowboy" || e.type === "shadow";
 const reqNeeded = () => stage === 1 ? KINGS_NEEDED : 2;
 const reqName = () => stage === 1 ? "Slime Kings" : stage === 2 ? "Spider Scouts" : "Outlaws";
@@ -269,7 +270,7 @@ function stat() {
 
 function startGame(h) {
   hero = h; audio(); DF = makeDF(diffIdx, stage); orbHeld = [false, false, false]; lastGain = null; PD = []; cowboysKilled = 0; run = { absorbed: 0, healed: 0, orbs: 0 }; endNote = "";
-  wl = { [h.w]: 1 }; for (const id of Object.keys(acct.shop || {})) if (acct.shop[id] && WDEF[id]) wl[id] = Math.max(wl[id] || 0, 1); pl = {}; cd = { bolt: 0.3, zap: 0.5, nova: 2, boom: 1, knives: 0.4, meteor: 0, blade: 0 }; reqKilled = 0; finalSpawned = false; finalDone = false; blindT = 0; blindA = 0; FZ = []; MT = []; fT = 0; RAD = []; MS = null; flashT = 0; sprintTog = false;
+  wl = { [h.w]: 1 }; for (const id of Object.keys(acct.shop || {})) if (acct.shop[id] && WDEF[id]) wl[id] = Math.max(wl[id] || 0, 1); pl = {}; cd = { bolt: 0.3, zap: 0.5, nova: 2, boom: 1, knives: 0.4, meteor: 0, blade: 0 }; reqKilled = 0; finalSpawned = false; finalDone = false; blindT = 0; blindA = 0; stageIntroT = 3; FZ = []; MT = []; fT = 0; RAD = []; MS = null; flashT = 0; sprintTog = false;
   P = { x: 0, y: 0, hp: stat().maxhp, stam: stat().stamMax, exh: false, stR: 0, sprint: false, rdCD: 0, inv: 0, face: 1, fx: 0, fy: 1, moving: false, hurt: 0, abCD: 0, dfCD: 0, dfT: 0, storm: 0, stormT: 0, shieldT: 0 }; freeze = 0;
   E = []; S = []; ES = []; G = []; PT = []; TX = []; FX = []; RN = []; FS = [];
   time = 0; kills = 0; level = 1; xp = 0; xpNeed = 5; pending = 0; boss = null; shake = 0; hitStop = 0;
@@ -441,7 +442,7 @@ function nearest(x, y, maxD = 99999, skip) {
 }
 function recordRun(win) {
   const key = bkey(), b = bests[key] || (bests[key] = { t: 0, w: false });
-  endNote = "";
+  endNote = ""; const wasUnlocked = stage < 3 && stageUnlocked(stage + 1);
   if (win && !b.w) endNote = "👑 FIRST CLEAR ON " + DF.name.toUpperCase() + "!";
   else if (time > b.t + 1) endNote = "🏆 NEW BEST TIME!";
   if (win) b.w = true;
@@ -449,7 +450,7 @@ function recordRun(win) {
   const mult = 1 + 0.15 * diffIdx + 0.3 * (stage - 1) + (endless ? 0.1 : 0);
   const gain = Math.round((kills * 0.6 + time * 0.8 + kingsKilled * 60 + cowboysKilled * 120 + (win ? 200 : 0)) * mult);
   const before = acctInfo(), sl0 = slots(); acct.xp += gain; const after = acctInfo();
-  lastGain = { unlocked: [], gain, orbs: run.orbs || 0, lvl: after.lvl, pts: after.lvl - before.lvl, up: after.lvl > before.lvl, slotUp: slots() > sl0, slots: slots() };
+  lastGain = { stageUnlock: (win && !endless && stage < 3 && !wasUnlocked && stageUnlocked(stage + 1)) ? stage + 1 : 0, unlocked: [], gain, orbs: run.orbs || 0, lvl: after.lvl, pts: after.lvl - before.lvl, up: after.lvl > before.lvl, slotUp: slots() > sl0, slots: slots() };
   try { localStorage.setItem("slimesiege_best3", JSON.stringify(bests)); localStorage.setItem("slimesiege_acct", JSON.stringify(acct)); } catch (e) {}
 }
 function quitRun() { if (state === "play" && endless && time > 5) { state = "over"; recordRun(false); paused = false; overT = 0; return; } toMenu(); }
@@ -664,7 +665,7 @@ function updateWeapons(dt) {
       let base = Math.atan2(P.fy, P.fx);
       if (usingMouse) base = Math.atan2(pointer.y - H / 2, pointer.x - W / 2);
       else { const tg = nearest(px, py, 560); if (tg) base = Math.atan2(tg.y - py, tg.x - px); }
-      for (let i = 0; i < n; i++) { const a = base + (i - (n - 1) / 2) * 0.14; S.push({ k: "bolt", knife: true, x: px, y: py, vx: Math.cos(a) * 720, vy: Math.sin(a) * 720, life: 0.8, dmg: 8 + 3 * L + (L >= 4 ? 4 : 0), pierce: 3, hit: new Set(), r: 6, col: "#e8f4ff", glow: "rgba(200,230,255,.3)" }); }
+      for (let i = 0; i < n; i++) { const a = base + (i - (n - 1) / 2) * 0.14; S.push({ k: "bolt", knife: true, x: px, y: py, vx: Math.cos(a) * 720, vy: Math.sin(a) * 720, life: 1.4, dmg: 14 + 5 * L + (L >= 4 ? 7 : 0), pierce: 6, hit: new Set(), r: 13, col: "#e8f4ff", glow: "rgba(200,230,255,.3)" }); }
       sfx.shoot(); cd.knives = 1.15 - 0.1 * L;
     }
   }
@@ -728,8 +729,8 @@ function triggerBlade() {
   let an = Math.atan2(P.fy || 0, P.fx || 1);
   if (usingMouse) an = Math.atan2(pointer.y - H / 2, pointer.x - W / 2);
   else { const t = nearest(px, py, 650); if (t) an = Math.atan2(t.y - py, t.x - px); }
-  S.push({ k: "blade", x: px + Math.cos(an) * 28, y: py + Math.sin(an) * 28, vx: Math.cos(an) * 760, vy: Math.sin(an) * 760, life: 1.35, r: 25, spin: 0, hit: new Set() });
-  cd.blade = 15; beep(260, 0.18, "sawtooth", 0.06, 500); burst(px, py, 12, "#8feaff", 160, 0.4);
+  S.push({ k: "blade", ring: true, x: px, y: py, life: 1.8, t: 0, r: 34, spin: 0, rad: 30, pts: [], hit: new Set() });
+  cd.blade = 15; beep(180, 0.3, "sawtooth", 0.07, 700); burst(px, py, 22, "#ff2a3a", 260, 0.5); shake = Math.max(shake, 6);
 }
 function triggerMeteor() {
   if (!P || state !== "play" || paused || !wl.meteor || MS || (cd.meteor || 0) > 0) { if (state === "play" && wl.meteor && cd.meteor > 0) addText(P.x, P.y - 38, "Meteor ready in " + Math.ceil(cd.meteor) + "s", "#ffb080", 13); return; }
@@ -1040,7 +1041,7 @@ function applyChoice(c) {
 /* ================= update ================= */
 function update(dt) {
   if (hitStop > 0) { hitStop -= dt; return; }
-  time += dt;
+  time += dt; if (stageIntroT > 0) stageIntroT -= dt;
   if (blindT > 0) { blindT -= dt; blindA = Math.min(1, blindA + dt * 4); } else blindA = Math.max(0, blindA - dt * 3);
   if (settings.autoKing && orbHeld.every(Boolean) && !(boss && !boss.dead)) summonKing();
   const st = stat();
@@ -1270,6 +1271,23 @@ function update(dt) {
           s.hit.add(e); dmgEnemy(e, s.refl && (isBig(e)) ? Math.min(s.dmg, e.maxhp * 0.002) : s.dmg, s.vx, s.vy, 150, !!s.refl); if (s.ice) e.slowT = 2;
           burst(s.x, s.y, 3, "#cbb8ff", 90, 0.25);
           if (s.pierce-- <= 0) { s.life = 0; break; }
+        }
+      }
+    } else if (s.k === "blade" && s.ring) {
+      s.t += dt; s.life -= dt; s.spin += dt * 9; s.x = P.x; s.y = P.y;
+      const f = Math.min(1, s.t / 1.8); s.rad = 30 + 560 * Math.pow(f, 0.75); s.pts.length = 0;
+      for (let i = 0; i < 6; i++) { const a = s.spin + i * TAU / 6; s.pts.push({ x: P.x + Math.cos(a) * s.rad, y: P.y + Math.sin(a) * s.rad, a }); }
+      for (const p of s.pts) {
+        if (PT.length < 500 && Math.random() < 0.8) PT.push({ x: p.x, y: p.y, vx: rnd(-30, 30), vy: rnd(-30, 30), life: 0.35, max: 0.35, color: "#ff2a3a", sz: 4 });
+        for (const e of E) {
+          if (e.dead || s.hit.has(e)) continue;
+          if (Math.hypot(e.x - p.x, e.y - p.y) < e.r + s.r) {
+            s.hit.add(e);
+            if (isBig(e)) dmgEnemy(e, e.maxhp * 0.06, Math.cos(p.a), Math.sin(p.a), 0, true);
+            else { const floorHp = e.maxhp * 0.25; if (e.hp > floorHp) e.hp = floorHp; }
+            e.flash = 0.12; burst(e.x, e.y, 12, "#ff3a4a", 180, 0.45);
+            addText(e.x, e.y - e.r - 12, isBig(e) ? "SLICED" : "25% REMAINING", "#ff5a6a", 12); sfx.hit();
+          }
         }
       }
     } else if (s.k === "blade") {
@@ -1735,8 +1753,20 @@ function drawWorld() {
   }
   if (state !== "menu") { drawCompanions(); drawPlayer(); drawPlayerFx(); }
   for (const s of S) {
-    if (s.k === "bolt" && s.knife) { const an = Math.atan2(s.vy, s.vx); ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(an); ctx.fillStyle = "rgba(200,230,255,.3)"; ctx.fillRect(-16, -3, 14, 6); ctx.fillStyle = "#eaf6ff"; ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-5, -4); ctx.lineTo(-5, 4); ctx.closePath(); ctx.fill(); ctx.fillStyle = "#8a6a4a"; ctx.fillRect(-10, -2, 5, 4); ctx.restore(); }
+    if (s.k === "bolt" && s.knife) { const an = Math.atan2(s.vy, s.vx); ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(an); ctx.scale(2.1, 2.1); ctx.fillStyle = "rgba(200,230,255,.3)"; ctx.fillRect(-16, -3, 14, 6); ctx.fillStyle = "#eaf6ff"; ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-5, -4); ctx.lineTo(-5, 4); ctx.closePath(); ctx.fill(); ctx.fillStyle = "#8a6a4a"; ctx.fillRect(-10, -2, 5, 4); ctx.restore(); }
     else if (s.k === "bolt") { ctx.fillStyle = s.glow || "rgba(160,120,255,.35)"; ctx.beginPath(); ctx.arc(s.x, s.y, 11, 0, TAU); ctx.fill(); ctx.fillStyle = s.col || "#fff"; ctx.beginPath(); ctx.arc(s.x, s.y, 5, 0, TAU); ctx.fill(); }
+    else if (s.k === "blade" && s.ring) {
+      ctx.save(); ctx.lineCap = "round";
+      ctx.strokeStyle = "rgba(255,40,60,.22)"; ctx.lineWidth = 16; ctx.beginPath(); ctx.arc(s.x, s.y, s.rad, 0, TAU); ctx.stroke();
+      ctx.strokeStyle = "rgba(255,80,90,.35)"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(s.x, s.y, s.rad, 0, TAU); ctx.stroke();
+      for (const p of s.pts) {
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(s.spin * 3.5); ctx.shadowColor = "#ff1a30"; ctx.shadowBlur = 24;
+        ctx.fillStyle = "#c4101e"; ctx.strokeStyle = "#ffb0b8"; ctx.lineWidth = 2.5; ctx.beginPath();
+        for (let i = 0; i < 12; i++) { const a = i * TAU / 12, rr = i % 2 ? s.r * 0.3 : s.r * 1.5; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+        ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle = "#2a0006"; ctx.beginPath(); ctx.arc(0, 0, s.r * 0.28, 0, TAU); ctx.fill(); ctx.restore();
+      }
+      ctx.restore();
+    }
     else if (s.k === "blade") { ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.spin); ctx.shadowColor = "#72e8ff"; ctx.shadowBlur = 18; ctx.fillStyle = "#dffaff"; ctx.strokeStyle = "#4ccfff"; ctx.lineWidth = 4; ctx.beginPath(); for (let i = 0; i < 8; i++) { const a = i * TAU / 8, rr = i % 2 ? s.r * 0.35 : s.r * 1.35; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore(); }
     else if (s.k === "fire") { ctx.fillStyle = "rgba(255,120,40,.35)"; ctx.beginPath(); ctx.arc(s.x, s.y, 14, 0, TAU); ctx.fill(); ctx.fillStyle = "#ffb04a"; ctx.beginPath(); ctx.arc(s.x, s.y, 8, 0, TAU); ctx.fill(); ctx.fillStyle = "#fff3b0"; ctx.beginPath(); ctx.arc(s.x, s.y, 4, 0, TAU); ctx.fill(); }
     else { ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.spin); ctx.fillStyle = "#e8f4ff"; ctx.strokeStyle = "#6fb4ff"; ctx.lineWidth = 3;
@@ -2246,6 +2276,37 @@ function closeSettings() {
   if (state === "play") paused = true;
 }
 function backToSettings() { state = "settings"; }
+function drawSaveDataScreen() {
+  uiLock = false; ctx.fillStyle = "rgba(8,14,22,.94)"; ctx.fillRect(0, 0, W, H);
+  const pw = Math.min(520, W - 28), x = W / 2 - pw / 2; let y = Math.max(18, H / 2 - 190);
+  txt("SAVE DATA", W / 2, y + 24, 30, "#9fe6ff"); y += 62;
+  panel(x, y, pw, 96, "rgba(15,22,32,.95)", "#3b5268");
+  txt("💾 Auto-saves every 10 seconds in this browser", x + 16, y + 24, 12.5, "#fff", "left", 700);
+  txt("Browsers can't write to a temp folder, so use Export", x + 16, y + 48, 11, "#9fb4c6", "left");
+  txt("to download a backup file, and Import to restore it.", x + 16, y + 68, 11, "#9fb4c6", "left"); y += 110;
+  button(x, y, pw, 46, "⬇  Export save file", exportSave, "#9fe6ff", 15); y += 58;
+  button(x, y, pw, 46, "⬆  Import save file", importSave, "#ffd23f", 15); y += 70;
+  button(x, y, pw, 42, "‹  Back to Settings", backToSettings, "#6bf0b0", 13);
+}
+function drawStageFx(t, dur, title, sub, col, dim) {
+  if (t < 0 || t > dur) return;
+  const cx = W / 2, cy = H * 0.5, inn = clamp(t / 0.5, 0, 1), out = clamp((dur - t) / 0.7, 0, 1), a = Math.min(inn, out);
+  const back = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0," + (dim * a) + ")"; ctx.fillRect(0, 0, W, H);
+  const bh = H * 0.1 * inn * out + 2; ctx.fillStyle = "rgba(0,0,0," + (0.85 * a) + ")"; ctx.fillRect(0, 0, W, bh); ctx.fillRect(0, H - bh, W, bh);
+  const bx = (t / dur) * (W + 400) - 200; const gb = ctx.createLinearGradient(bx - 140, 0, bx + 140, 0);
+  gb.addColorStop(0, "rgba(255,255,255,0)"); gb.addColorStop(0.5, "rgba(255,255,255,.22)"); gb.addColorStop(1, "rgba(255,255,255,0)"); ctx.fillStyle = gb; ctx.fillRect(bx - 140, 0, 280, H);
+  ctx.lineWidth = 4; ctx.strokeStyle = col;
+  for (let k = 0; k < 3; k++) { const tt = t - 0.15 - k * 0.25; if (tt < 0) continue; ctx.globalAlpha = Math.max(0, 0.7 - tt * 0.6) * out; ctx.beginPath(); ctx.arc(cx, cy, 30 + tt * 340, 0, TAU); ctx.stroke(); }
+  ctx.globalAlpha = a; ctx.fillStyle = col;
+  for (let i = 0; i < 28; i++) { const an = i / 28 * TAU + i * 0.37, sp = 90 + (i * 53 % 170), tt = Math.max(0, t - 0.2), rr = sp * tt * 1.3; ctx.globalAlpha = Math.max(0, 1 - tt / 2.2) * out; ctx.fillRect(cx + Math.cos(an) * rr - 2, cy + Math.sin(an) * rr - 2 - tt * 12, 4, 4); }
+  ctx.globalAlpha = a; const sc = 0.4 + 0.6 * back(clamp(t / 0.7, 0, 1));
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(sc, sc); ctx.shadowColor = col; ctx.shadowBlur = 28;
+  txt(title, 0, 0, Math.min(46, W / 9), "#fff", "center", 900); ctx.restore();
+  ctx.globalAlpha = a * clamp((t - 0.5) / 0.4, 0, 1); txt(sub, cx, cy + Math.min(46, W / 9) * 0.9 + 12, Math.min(16, W / 24), col, "center", 700);
+  ctx.restore();
+}
 
 function drawSettingsScreen() {
   uiLock = false; ctx.fillStyle = "rgba(8,14,22,.94)"; ctx.fillRect(0, 0, W, H);
@@ -2271,16 +2332,14 @@ function drawSettingsScreen() {
     panel(x, y, pw, 50, "rgba(15,22,32,.8)", "#3b5268");
     txt("Full reset unlocks after clearing Stage 3 · Hard", W / 2, y + 25, 12, "#9fb4c6"); y += 62;
   }
-  { const bw2 = (pw - 8) / 2;
-    button(x, y, bw2, 36, "⬇ Export save", exportSave, "#9fe6ff", 12); button(x + bw2 + 8, y, bw2, 36, "⬆ Import save", importSave, "#ffd23f", 12); y += 44;
-    txt("💾 Auto-saves every 10 seconds in this browser", W / 2, y + 4, 10.5, "#9fb4c6", "center", 600); y += 18; }
+  button(x, y, pw, 40, "💾  SAVE DATA  ·  Export / Import", () => { state = "savedata"; }, "#9fe6ff", 13); y += 52;
   panel(x, y, pw, 124, "rgba(15,22,32,.95)", "#3b5268");
-  txt("CHANGELOG · v1.56", x + 16, y + 18, 13, "#ffd23f", "left");
-  txt("• Orbiting knives replaced by orbs · Rift Blade manual (B)", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
-  txt("• Final bosses per stage; new ShadowCaster (stage 3)", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
-  txt("• Oculus wizard (Lv 35) · permanent shop from 20 Orbs", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
-  txt("• Autosave every 10s · export / import save file", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
-  txt("• Mobile: buttons resize to fit", x + 16, y + 111, 10.5, "#d8e6f2", "left", 600); y += 134;
+  txt("CHANGELOG · v1.7.0", x + 16, y + 18, 13, "#ffd23f", "left");
+  txt("• Stage unlock + stage intro animations", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
+  txt("• Export / Import moved into Settings ▸ Save Data", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
+  txt("• New version scheme: major.minor.patch", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
+  txt("• Rift Blade red ring · bigger knives · orbs only", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
+  txt("• Final bosses · ShadowCaster · autosave every 10s", x + 16, y + 111, 10.5, "#d8e6f2", "left", 600); y += 134;
   button(W / 2 - 100, Math.min(H - 52, y + 4), 200, 40, "‹  Back", closeSettings, "#6bf0b0", 15);
 }
 function drawShopScreen() {
@@ -2379,7 +2438,7 @@ function drawBlind() {
 function render() {
   ctx.fillStyle = "#2b4a3a"; ctx.fillRect(0, 0, W, H);
   rects = []; uiLock = false;
-  const inMenu = ["menu", "companions", "upgrades", "wizardUpgrades", "settings", "shop", "resetConfirm1", "resetConfirm2"].includes(state);
+  const inMenu = ["menu", "companions", "upgrades", "wizardUpgrades", "settings", "savedata", "shop", "resetConfirm1", "resetConfirm2"].includes(state);
   if (inMenu) { camX = Math.cos(menuT * 0.3) * 300; camY = Math.sin(menuT * 0.25) * 300; }
   else if (P) { camX = P.x; camY = P.y; }
   ctx.save();
@@ -2390,14 +2449,14 @@ function render() {
   if (inMenu) drawGround(); else drawWorld();
   ctx.restore();
   if (freeze > 0 && !inMenu) { ctx.fillStyle = `rgba(90,170,255,${0.12 + 0.05 * Math.sin(time * 10)})`; ctx.fillRect(0, 0, W, H); }
-  if (inMenu) { if (state === "companions") drawCompanionScreen(); else if (state === "upgrades" || state === "wizardUpgrades") drawUpgradeScreen(); else if (state === "settings") drawSettingsScreen(); else if (state === "shop") drawShopScreen(); else if (state === "resetConfirm1") drawResetConfirm(1); else if (state === "resetConfirm2") drawResetConfirm(2); else drawMenu(); }
+  if (inMenu) { if (state === "companions") drawCompanionScreen(); else if (state === "upgrades" || state === "wizardUpgrades") drawUpgradeScreen(); else if (state === "settings") drawSettingsScreen(); else if (state === "savedata") drawSaveDataScreen(); else if (state === "shop") drawShopScreen(); else if (state === "resetConfirm1") drawResetConfirm(1); else if (state === "resetConfirm2") drawResetConfirm(2); else drawMenu(); }
   else {
-    drawBlind(); drawScreenFx(); drawHUD(); drawAbility(); drawDeflectBtn(); drawSprintBtn(); drawCrosshair(); drawCompHud(); drawMedArrows(); drawZoneArrows();
+    drawBlind(); drawScreenFx(); drawHUD(); if (stageIntroT > 0 && !endless) drawStageFx(3 - stageIntroT, 3, "STAGE " + stage, DF.name + "  ·  " + finalNames(), ["#6bf0b0", "#9c8bff", "#ffd23f"][Math.min(2, stage - 1)], 0.3); drawAbility(); drawDeflectBtn(); drawSprintBtn(); drawCrosshair(); drawCompHud(); drawMedArrows(); drawZoneArrows();
     if (state === "level") drawLevel();
     if (state === "recruit") drawRecruit();
     if (paused && state === "play") drawPause();
     if (state === "over") drawEnd(false);
-    if (state === "win") drawEnd(true);
+    if (state === "win") { drawEnd(true); if (lastGain && lastGain.stageUnlock) drawStageFx(overT - 0.9, 4.4, "STAGE " + lastGain.stageUnlock + " UNLOCKED", "New foes and a deadlier final boss await…", ["#6bf0b0", "#9c8bff", "#ffd23f"][Math.min(2, lastGain.stageUnlock - 1)], 0.5); }
   }
   // vignette
   const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.hypot(W, H) * 0.6);
@@ -2434,6 +2493,8 @@ addEventListener("keydown", e => {
       if (c === "Enter" || c === "Space") startFromMenu();
     } else if (state === "upgrades" || state === "wizardUpgrades") {
       if (c === "Escape" || c === "Enter" || c === "KeyU") backToSettings();
+    } else if (state === "savedata") {
+      if (c === "Escape" || c === "Enter") backToSettings();
     } else if (state === "settings") {
       if (c === "Escape" || c === "Enter") closeSettings();
     } else if (state === "shop") {
@@ -2464,7 +2525,7 @@ cv.addEventListener("pointermove", e => {
 cv.addEventListener("pointerdown", e => {
   audio(); pointer.x = e.clientX; pointer.y = e.clientY;
   usingMouse = e.pointerType === "mouse"; if (!usingMouse) usingTouch = true; else usingTouch = false;
-  if (state === "upgrades" || state === "wizardUpgrades" || state === "settings" || state === "shop" || state === "resetConfirm1" || state === "resetConfirm2") { clickRects(); return; }
+  if (state === "upgrades" || state === "wizardUpgrades" || state === "settings" || state === "savedata" || state === "shop" || state === "resetConfirm1" || state === "resetConfirm2") { clickRects(); return; }
   if (state === "menu" || state === "companions" || state === "recruit") { const so = scrollObj(); menuDrag = { y: e.clientY, s: so ? so.s : 0, moved: false, so }; return; }
   if (state === "level") { clickRects(); return; }
   if (state === "over" || state === "win") { if (overT > 0.8) clickRects(); return; }
