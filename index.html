@@ -18,7 +18,7 @@
 <script>
 (() => {
 "use strict";
-const VERSION = "v1.55"; // Manual Rift Blade, stage final bosses, ShadowCaster, autosave
+const VERSION = "v1.56"; // Orbiting knives replaced by orbs; stage final bosses, ShadowCaster, FOV fix
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -1654,11 +1654,7 @@ function drawPlayer() {
     const L = wl2, n = [0, 2, 3, 3, 4, 5][L], rad = 62 + 7 * L + (L >= 3 ? 8 : 0), sp = 2.6 + 0.35 * L;
     for (let i = 0; i < n; i++) {
       const a = time * sp + i * TAU / n, ox = x + Math.cos(a) * rad, oy = y + Math.sin(a) * rad, or = 11 + (L >= 3 ? 3 : 0);
-      if (acct.shop && acct.shop.orbit) {
-        ctx.save(); ctx.translate(ox, oy); ctx.rotate(a + Math.PI / 2); ctx.shadowColor = "#9feaff"; ctx.shadowBlur = 12;
-        ctx.fillStyle = "#dcefff"; ctx.beginPath(); ctx.moveTo(0, -17); ctx.lineTo(5, 7); ctx.lineTo(0, 4); ctx.lineTo(-5, 7); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = "#5b7895"; ctx.fillRect(-2, 5, 4, 8); ctx.restore();
-      } else {
+      {
         const gr = ctx.createRadialGradient(ox, oy, 1, ox, oy, or + 6); gr.addColorStop(0, "#fff"); gr.addColorStop(0.5, "#6fe0ff"); gr.addColorStop(1, "rgba(80,180,255,0)");
         ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(ox, oy, or + 6, 0, TAU); ctx.fill();
       }
@@ -2226,7 +2222,7 @@ function drawUpgradeScreen() {
 function drawWizardUpgradeScreen() { upgradeTab = "wizards"; drawUpgradeScreen(); }
 
 const SHOP_ITEMS = [
-  { id: "orbit", name: "Orbiting Blades", icon: "🗡️", cost: 20, desc: "A ring of spinning knives protects you" },
+  { id: "orbit", name: "Orbiting Orbs", icon: "🔮", cost: 20, desc: "A ring of glowing orbs protects you" },
   { id: "bolt", name: "Magic Bolt", icon: "✨", cost: 20, desc: "Fire magical bolts at nearby enemies" },
   { id: "zap", name: "Lightning", icon: "⚡", cost: 25, desc: "Strike enemies with lightning" },
   { id: "nova", name: "Shock Nova", icon: "💥", cost: 30, desc: "Pulse blasts around you" },
@@ -2279,8 +2275,8 @@ function drawSettingsScreen() {
     button(x, y, bw2, 36, "⬇ Export save", exportSave, "#9fe6ff", 12); button(x + bw2 + 8, y, bw2, 36, "⬆ Import save", importSave, "#ffd23f", 12); y += 44;
     txt("💾 Auto-saves every 10 seconds in this browser", W / 2, y + 4, 10.5, "#9fb4c6", "center", 600); y += 18; }
   panel(x, y, pw, 124, "rgba(15,22,32,.95)", "#3b5268");
-  txt("CHANGELOG · v1.55", x + 16, y + 18, 13, "#ffd23f", "left");
-  txt("• Rift Blade is manual: press B or tap the BLADE button", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
+  txt("CHANGELOG · v1.56", x + 16, y + 18, 13, "#ffd23f", "left");
+  txt("• Orbiting knives replaced by orbs · Rift Blade manual (B)", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
   txt("• Final bosses per stage; new ShadowCaster (stage 3)", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
   txt("• Oculus wizard (Lv 35) · permanent shop from 20 Orbs", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
   txt("• Autosave every 10s · export / import save file", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
