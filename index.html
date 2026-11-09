@@ -19,7 +19,7 @@
 (() => {
 "use strict";
 // Versioning: MAJOR.MINOR.PATCH (major = big changes, minor = small features/changes, patch = bug fixes)
-const VERSION = "v2.1.0"; // Waves, Aegis dome, Moss pets, craters, boss stun, player buff
+const VERSION = "v2.2.0"; // Auto-skip button for wave breaks
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -209,8 +209,8 @@ let uiLock = false, catFilter = "all", recChoices = [], recAll = false;
 try { const bb = JSON.parse(localStorage.getItem("slimesiege_best3") || "{}"); if (bb && typeof bb === "object") bests = bb; } catch (e) {}
 let acct = { xp: 0, up: {}, wiz: {}, slimency: 0, orbProgress: 0, shop: {}, wizards: { Atlas: true } };
 let selectedWizardUpgrade = "Atlas", upgradeTab = "stats", settingsReturnState = "menu";
-let settings = { autoKing: false, fov: 1 };
-try { const ss = JSON.parse(localStorage.getItem("slimesiege_settings") || "null"); if (ss) settings = { autoKing: !!ss.autoKing, fov: clamp(Number(ss.fov) || 1, 0.75, 1.3) }; } catch (e) {}
+let settings = { autoKing: false, autoSkip: false, fov: 1 };
+try { const ss = JSON.parse(localStorage.getItem("slimesiege_settings") || "null"); if (ss) settings = { autoKing: !!ss.autoKing, autoSkip: !!ss.autoSkip, fov: clamp(Number(ss.fov) || 1, 0.75, 1.3) }; } catch (e) {}
 function saveSettings() { try { localStorage.setItem("slimesiege_settings", JSON.stringify(settings)); } catch (e) {} }
 function wizardCost(c) { return 0; }
 function buyWizard(c) {
@@ -767,7 +767,7 @@ function drawFeedBeams() {
 }
 function waveQuotaFor(n) { return Math.round((14 + 6 * n) * Math.sqrt(DF.spawn)); }
 function updateWaves(dt) {
-  if (waveBreak > 0) { waveBreak -= dt; if (waveBreak <= 0) banner = { text: "🌊 WAVE " + waveN + " — SLAY " + waveQuota, life: 2, color: "#8fd8ff" }; return; }
+  if (waveBreak > 0) { if (settings.autoSkip && waveBreak > 0.5) waveBreak = 0.5; waveBreak -= dt; if (waveBreak <= 0) banner = { text: "🌊 WAVE " + waveN + " — SLAY " + waveQuota, life: 2, color: "#8fd8ff" }; return; }
   if (waveKills >= waveQuota) waveClear();
 }
 function waveClear() {
@@ -783,6 +783,10 @@ function waveClear() {
   waveN++; waveKills = 0; waveSpawned = 0; waveQuota = waveQuotaFor(waveN); waveBreak = 6; spawnT = 1; P.inv = Math.max(P.inv, 1.2);
 }
 function drawWaveHUD() {
+  const bw = 132, bx = W - bw - 58, by = 62 + 50;
+  panel(bx, by, bw, 24, "rgba(15,22,32,.82)", settings.autoSkip ? "#6bf0b0" : "#6a7886"); txt("⏩ AUTO-SKIP: " + (settings.autoSkip ? "ON" : "OFF"), bx + bw / 2, by + 12, 11, settings.autoSkip ? "#6bf0b0" : "#9fb4c6", "center", 800);
+  addRect(bx, by, bw, 24, () => { settings.autoSkip = !settings.autoSkip; saveSettings(); beep(600, 0.05, "triangle", 0.04); });
+  if (waveBreak > 0.6 && !settings.autoSkip) { panel(bx, by + 28, bw, 22, "rgba(15,22,32,.82)", "#ffe14a"); txt("SKIP BREAK ▶", bx + bw / 2, by + 39, 11, "#ffe14a", "center", 800); addRect(bx, by + 28, bw, 22, () => { waveBreak = 0.5; }); }
   const w = 132, x = W - w - 58, y = 62; panel(x, y, w, 46, "rgba(15,22,32,.82)", waveBreak > 0 ? "#ffe14a" : "#6fb8ff");
   if (waveBreak > 0) { txt("WAVE " + waveN + " IN " + Math.ceil(waveBreak) + "s", x + w / 2, y + 16, 12, "#ffe14a", "center", 800); txt("Slay " + waveQuota + " foes", x + w / 2, y + 34, 11, "#cfe3f2", "center", 600); return; }
   txt("WAVE " + waveN, x + 10, y + 14, 13, "#8fd8ff", "left", 800); txt(Math.min(waveKills, waveQuota) + " / " + waveQuota, x + w - 10, y + 14, 13, "#fff", "right", 800);
@@ -2794,8 +2798,8 @@ function drawSettingsScreen() {
   }
   button(x, y, pw, 40, "💾  SAVE DATA  ·  Export / Import", () => { state = "savedata"; }, "#9fe6ff", 13); y += 52;
   panel(x, y, pw, 124, "rgba(15,22,32,.95)", "#3b5268");
-  txt("CHANGELOG · v2.1.0", x + 16, y + 18, 13, "#ffd23f", "left");
-  txt("• Waves with kill counter + clear rewards", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
+  txt("CHANGELOG · v2.2.0", x + 16, y + 18, 13, "#ffd23f", "left");
+  txt("• Auto-skip button skips wave breaks", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
   txt("• Aegis dome · Moss pets evolve to Monarch", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
   txt("• Meteor craters · blade stuns bosses 5s", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
   txt("• Player buffed · Second Wind · moles dig under", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
@@ -2833,7 +2837,7 @@ function drawResetConfirm(stageNo) {
     txt("Last chance. All saved game progress will be lost.", W / 2, y + 100, 13, "#fff");
     button(x + 24, y + 180, (pw - 60) / 2, 44, "YES, RESET ALL", () => {
       try { ["slimesiege_acct", "slimesiege_best3", "slimesiege_best", "slimesiege_sel", "slimesiege_settings"].forEach(k => localStorage.removeItem(k)); } catch (e) {}
-      acct = { xp: 0, up: {}, wiz: {}, slimency: 0, orbProgress: 0, shop: {}, wizards: { Atlas: true } }; bests = {}; best = 0; selComp = []; selMain = 0; stage = 1; diffIdx = 1; endless = false; settings = { autoKing: false, fov: 1 }; saveAcct(); saveSettings(); state = "menu"; menuS.s = 0;
+      acct = { xp: 0, up: {}, wiz: {}, slimency: 0, orbProgress: 0, shop: {}, wizards: { Atlas: true } }; bests = {}; best = 0; selComp = []; selMain = 0; stage = 1; diffIdx = 1; endless = false; settings = { autoKing: false, autoSkip: false, fov: 1 }; saveAcct(); saveSettings(); state = "menu"; menuS.s = 0;
     }, "#ff5368", 13);
     button(x + 36 + (pw - 60) / 2, y + 180, (pw - 60) / 2, 44, "CANCEL", () => { state = "settings"; }, "#6bf0b0", 14);
   }
