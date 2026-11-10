@@ -19,7 +19,7 @@
 (() => {
 "use strict";
 // Versioning: MAJOR.MINOR.PATCH (major = big changes, minor = small features/changes, patch = bug fixes)
-const VERSION = "v4.0.1"; // Off-screen arrows for King orbs
+const VERSION = "v4.0.2"; // King orb indicators now show on-screen too
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -2573,7 +2573,18 @@ function drawMedArrows() {
   for (const g of G) {
     if (g.t !== "medkit" && g.t !== "aegis" && g.t !== "kingorb") continue;
     const ko = g.t === "kingorb", oc = ko ? ORB_COL[g.c] : null, ae = g.t === "aegis", dx = (g.x - camX) * settings.fov, dy = (g.y - camY) * settings.fov;
-    if (Math.abs(dx) < W / 2 - 30 && Math.abs(dy) < H / 2 - 30) continue;
+    if (Math.abs(dx) < W / 2 - 30 && Math.abs(dy) < H / 2 - 30) {
+      if (!ko) continue;
+      const sx = W / 2 + dx, sy = H / 2 + dy, pu = (time * 1.6) % 1, bo = Math.sin(time * 7) * 5;
+      ctx.save();
+      const bg = ctx.createLinearGradient(0, sy - 240, 0, sy); bg.addColorStop(0, oc + "00"); bg.addColorStop(1, oc + "88"); ctx.fillStyle = bg; ctx.fillRect(sx - 4, sy - 240, 8, 240);
+      ctx.strokeStyle = oc; ctx.lineWidth = 3; ctx.globalAlpha = 1 - pu; ctx.beginPath(); ctx.arc(sx, sy, 16 + pu * 46, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(sx, sy, 26, 0, TAU); ctx.stroke();
+      ctx.translate(sx, sy - 56 + bo); ctx.fillStyle = "rgba(15,22,32,.85)"; ctx.beginPath(); ctx.arc(0, 0, 15, 0, TAU); ctx.fill(); ctx.strokeStyle = oc; ctx.stroke();
+      ctx.fillStyle = oc; ctx.shadowColor = oc; ctx.shadowBlur = 12; ctx.beginPath(); ctx.arc(0, 0, 6 + Math.sin(time * 6), 0, TAU); ctx.fill(); ctx.shadowBlur = 0;
+      ctx.beginPath(); ctx.moveTo(0, 28); ctx.lineTo(-7, 18); ctx.lineTo(7, 18); ctx.closePath(); ctx.fill();
+      ctx.restore(); continue;
+    }
     const k = Math.min((W / 2 - 34) / (Math.abs(dx) || 1), (H / 2 - 34) / (Math.abs(dy) || 1));
     ctx.save(); ctx.translate(W / 2 + dx * k, H / 2 + dy * k);
     ctx.fillStyle = "rgba(15,22,32,.8)"; ctx.beginPath(); ctx.arc(0, 0, 16, 0, TAU); ctx.fill(); ctx.strokeStyle = ko ? oc : ae ? "#ffe08a" : "#ff4a63"; ctx.lineWidth = 3; ctx.stroke();
@@ -2974,8 +2985,8 @@ function drawSettingsScreen() {
   }
   button(x, y, pw, 40, "💾  SAVE DATA  ·  Export / Import", () => { state = "savedata"; }, "#9fe6ff", 13); y += 52;
   panel(x, y, pw, 124, "rgba(15,22,32,.95)", "#3b5268");
-  txt("CHANGELOG · v4.0.1", x + 16, y + 18, 13, "#ffd23f", "left");
-  txt("• Off-screen arrows point to King orbs", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
+  txt("CHANGELOG · v4.0.2", x + 16, y + 18, 13, "#ffd23f", "left");
+  txt("• King orbs get a beacon + marker on-screen", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
   txt("• Lore of the ShadowCaster & Cloud Caster", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
   txt("• Boss cutscenes · first clear = +10 ⟳", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
   txt("• Timer scales with difficulty (6–15 min)", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
