@@ -19,7 +19,7 @@
 (() => {
 "use strict";
 // Versioning: MAJOR.MINOR.PATCH (major = big changes, minor = small features/changes, patch = bug fixes)
-const VERSION = "v3.0.1"; // Game over when the timer runs out (no overtime)
+const VERSION = "v3.1.0"; // Fixed 10:00 timer, Rift Blade overhaul, Ascended Rift Blade (rebirth shop)
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -97,7 +97,7 @@ const WDEF = {
   flame: { name: "Flame Trail", icon: "🔥", d: ["", "Leave burning fire behind you", "Bigger, longer fire", "Burns harder", "Fire lasts longer", "Inferno trail"] },
   meteor: { name: "Meteor Storm", icon: "☄️", d: ["", "Every 30s a meteor hits — the sky burns red for 15s, hurting everything", "Harder crash & burn", "Bigger crater", "Burns even hotter", "Apocalypse"] },
   boom:  { name: "Boomerang", icon: "🌀", d: ["", "Throws a returning blade", "More damage", "+1 blade", "Bigger blades", "+1 blade"] },
-  blade: { name: "Rift Blade", icon: "⚔️", d: ["", "Rare boost: press B (or tap the button): a giant red blade ring spirals outward in all directions, leaving each enemy hit at 25% health (bosses take 6% max HP)"] },
+  blade: { name: "Rift Blade", icon: "⚔️", d: ["", "Rare boost: press B (or tap the button): a ring of 8 razor blades spirals outward, leaving each enemy hit at 20% health (bosses take 8% max HP and are stunned 5s). Ascended: 12 blades, 2 rings, 10% health, 12% boss damage"] },
 };
 const PDEF = {
   might:  { name: "Might", icon: "💪", d: "+18% damage" },
@@ -286,11 +286,11 @@ function stat() {
 
 function startGame(h) {
   hero = h; audio(); DF = makeDF(diffIdx, stage); orbHeld = [false, false, false]; lastGain = null; PD = []; cowboysKilled = 0; run = { absorbed: 0, healed: 0, orbs: 0 }; endNote = "";
-  wl = { [h.w]: 1 }; for (const id of Object.keys(acct.shop || {})) if (acct.shop[id] && WDEF[id]) wl[id] = Math.max(wl[id] || 0, 1); pl = {}; cd = { bolt: 0.3, zap: 0.5, nova: 2, boom: 1, knives: 0.4, meteor: 0, blade: 0 }; reqKilled = 0; finalSpawned = false; finalDone = false; blindT = 0; blindA = 0; stageIntroT = 3; SW = []; LT = []; CR = []; AG = []; PETS = []; petSpawned = 0; waveN = 1; waveKills = 0; waveSpawned = 0; waveQuota = waveQuotaFor(1); waveBreak = 3; aegT = rnd(90, 140); TKILL.clear(); TERR.clear(); linkOn = false; linkSaid = false; swTick = 0; FZ = []; MT = []; fT = 0; RAD = []; MS = null; flashT = 0; sprintTog = false;
+  wl = { [h.w]: 1 }; for (const id of Object.keys(acct.shop || {})) if (acct.shop[id] && WDEF[id]) wl[id] = Math.max(wl[id] || 0, 1); if (rbRank("ascend")) wl.blade = 1; pl = {}; cd = { bolt: 0.3, zap: 0.5, nova: 2, boom: 1, knives: 0.4, meteor: 0, blade: 0 }; reqKilled = 0; finalSpawned = false; finalDone = false; blindT = 0; blindA = 0; stageIntroT = 3; SW = []; LT = []; CR = []; AG = []; PETS = []; petSpawned = 0; waveN = 1; waveKills = 0; waveSpawned = 0; waveQuota = waveQuotaFor(1); waveBreak = 3; aegT = rnd(90, 140); TKILL.clear(); TERR.clear(); linkOn = false; linkSaid = false; swTick = 0; FZ = []; MT = []; fT = 0; RAD = []; MS = null; flashT = 0; sprintTog = false;
   P = { x: 0, y: 0, hp: stat().maxhp, stam: stat().stamMax, exh: false, stR: 0, sprint: false, rdCD: 0, inv: 0, face: 1, fx: 0, fy: 1, moving: false, hurt: 0, abCD: 0, dfCD: 0, dfT: 0, storm: 0, stormT: 0, shieldT: 0, wind: 0 }; freeze = 0; if (rbRank("aegis")) AG.push({ x: 0, y: 0, r: 205, life: 10 + 8 * rbRank("aegis"), max: 10 + 8 * rbRank("aegis"), t: 0, fl: 0 });
   E = []; S = []; ES = []; G = []; PT = []; TX = []; FX = []; RN = []; FS = [];
   time = 0; kills = 0; level = 1; xp = 0; xpNeed = 5; pending = 0; boss = null; shake = 0; hitStop = 0;
-  if (endless) { WIN_TIME = Infinity; PACE = 1.25; } else { WIN_TIME = rint(300, 600); PACE = (420 + 0.35 * (WIN_TIME - 240)) / WIN_TIME; }
+  if (endless) { WIN_TIME = Infinity; PACE = 1.25; } else { WIN_TIME = 600; PACE = (420 + 0.35 * (WIN_TIME - 240)) / WIN_TIME; }
   kingTimes = []; kingIdx = 0; kingsKilled = 0; cowboyDead = false; cowboySpawned = false; overtime = false; SZ = []; szT = 12 * DF.safe; swarmEvery = endless ? 45 : WIN_TIME / 7; nextCowboy = 300;
   spawnT = 1; nextSwarm = swarmEvery * 0.6; nextBoss = Infinity; bossN = 0;
   banner = { text: endless ? "♾ ENDLESS — COLLECT ORBS TO SUMMON KINGS" : "SURVIVE " + fmt(WIN_TIME) + "  ·  SLAY " + reqNeeded() + " " + reqName().toUpperCase() + ", THEN " + finalNames().toUpperCase(), life: 4, color: "#fff" };
@@ -1040,6 +1040,53 @@ function orbList() {
   for (let i = 0; i < n; i++) { const a = time * sp + i * TAU / n; out.push({ x: P.x + Math.cos(a) * rad, y: P.y + Math.sin(a) * rad, r: or }); }
   return out;
 }
+function bladePath(L, W2) {
+  ctx.beginPath(); ctx.moveTo(-L * 0.55, 0);
+  ctx.quadraticCurveTo(-L * 0.1, -W2 * 1.3, L * 0.95, -W2 * 0.12);
+  ctx.quadraticCurveTo(L * 0.25, -W2 * 0.15, L * 0.15, W2 * 0.55);
+  ctx.quadraticCurveTo(-L * 0.2, W2 * 0.45, -L * 0.55, 0); ctx.closePath();
+}
+function drawBladeRing(s) {
+  const asc = s.asc, al = clamp(s.life / 0.45, 0, 1), cx = s.x, cy = s.y, R = s.rad, pa = asc ? "255,200,80" : "255,40,60";
+  ctx.save(); ctx.lineCap = "round"; ctx.globalAlpha = al;
+  // ground shockwave disc
+  const g = ctx.createRadialGradient(cx, cy, R * 0.6, cx, cy, R + 14); g.addColorStop(0, "rgba(" + pa + ",0)"); g.addColorStop(0.85, "rgba(" + pa + ",.16)"); g.addColorStop(1, "rgba(" + pa + ",.38)");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R + 14, 0, TAU); ctx.fill();
+  // rune circle
+  ctx.strokeStyle = "rgba(" + pa + ",.55)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.stroke();
+  ctx.setLineDash([6, 14]); ctx.lineDashOffset = -s.spin * 40; ctx.beginPath(); ctx.arc(cx, cy, R * 0.93, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+  if (asc) { ctx.strokeStyle = "rgba(255,230,160,.4)"; ctx.beginPath(); ctx.arc(cx, cy, R * 0.62, 0, TAU); ctx.stroke(); }
+  // trails
+  for (const p of s.pts) {
+    const dir = p.two ? -1 : 1, rr = p.rr;
+    for (let k = 0; k < 7; k++) {
+      const a0 = p.a - dir * (k * 0.11 + 0.06), a1 = p.a - dir * k * 0.11;
+      ctx.strokeStyle = "rgba(" + (p.two ? "255,230,150" : pa) + "," + (0.5 * (1 - k / 7)) + ")"; ctx.lineWidth = (asc ? 20 : 15) * (1 - k / 8);
+      ctx.beginPath(); ctx.arc(cx, cy, rr, Math.min(a0, a1), Math.max(a0, a1)); ctx.stroke();
+    }
+  }
+  // lightning between blades (ascended)
+  if (asc) {
+    ctx.strokeStyle = "rgba(255,240,190," + (0.5 + 0.3 * Math.sin(time * 40)) + ")"; ctx.lineWidth = 2; ctx.shadowColor = "#ffcf5a"; ctx.shadowBlur = 12;
+    for (let i = 0; i < s.pts.length; i++) { const p = s.pts[i], q = s.pts[(i + 2) % s.pts.length]; ctx.beginPath(); ctx.moveTo(p.x, p.y); for (let t = 1; t < 5; t++) { const f = t / 5; ctx.lineTo(p.x + (q.x - p.x) * f + rnd(-14, 14), p.y + (q.y - p.y) * f + rnd(-14, 14)); } ctx.lineTo(q.x, q.y); ctx.stroke(); }
+    ctx.shadowBlur = 0;
+  }
+  // blades
+  for (const p of s.pts) {
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a + (p.two ? -Math.PI / 2 : Math.PI / 2) + Math.sin(s.spin * 4 + p.a) * 0.08);
+    const L = s.r * (p.two ? 1.45 : 1.9), Wd = s.r * 0.62;
+    ctx.shadowColor = asc ? "#ffb52a" : "#ff1a30"; ctx.shadowBlur = 28;
+    const bg = ctx.createLinearGradient(-L * 0.5, 0, L, 0); if (asc) { bg.addColorStop(0, "#7a3a00"); bg.addColorStop(0.5, "#ffb52a"); bg.addColorStop(1, "#fff6c8"); } else { bg.addColorStop(0, "#4a0008"); bg.addColorStop(0.5, "#d8102a"); bg.addColorStop(1, "#ffd0d6"); }
+    ctx.fillStyle = bg; bladePath(L, Wd); ctx.fill(); ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(255,255,255,.9)"; ctx.lineWidth = 2; bladePath(L, Wd); ctx.stroke();
+    ctx.strokeStyle = "rgba(0,0,0,.45)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-L * 0.35, 0); ctx.quadraticCurveTo(L * 0.2, -Wd * 0.45, L * 0.8, -Wd * 0.1); ctx.stroke();
+    ctx.fillStyle = asc ? "#fff2b0" : "#2a0006"; ctx.beginPath(); ctx.arc(-L * 0.45, 0, s.r * 0.2, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+  // core glow on player
+  const cg = ctx.createRadialGradient(cx, cy, 4, cx, cy, 70); cg.addColorStop(0, "rgba(" + pa + ",.5)"); cg.addColorStop(1, "rgba(" + pa + ",0)"); ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(cx, cy, 70, 0, TAU); ctx.fill();
+  ctx.restore();
+}
 function triggerBlade() {
   if (!P || state !== "play" || paused || !wl.blade) return;
   if ((cd.blade || 0) > 0) { addText(P.x, P.y - 38, "Blade ready in " + Math.ceil(cd.blade) + "s", "#8feaff", 13); return; }
@@ -1047,8 +1094,10 @@ function triggerBlade() {
   let an = Math.atan2(P.fy || 0, P.fx || 1);
   if (usingMouse) an = Math.atan2(pointer.y - H / 2, pointer.x - W / 2);
   else { const t = nearest(px, py, 650); if (t) an = Math.atan2(t.y - py, t.x - px); }
-  S.push({ k: "blade", ring: true, x: px, y: py, life: 1.8, t: 0, r: 34, spin: 0, rad: 30, pts: [], hit: new Set() });
-  cd.blade = 15; beep(180, 0.3, "sawtooth", 0.07, 700); burst(px, py, 22, "#ff2a3a", 260, 0.5); shake = Math.max(shake, 6);
+  const asc = rbRank("ascend") > 0;
+  S.push({ k: "blade", ring: true, asc, n: asc ? 12 : 8, x: px, y: py, life: asc ? 2.4 : 2, dur: asc ? 2.4 : 2, t: 0, r: asc ? 46 : 38, spin: 0, rad: 30, pts: [], hit: new Set(), tr: [] });
+  cd.blade = asc ? 10 : 13; beep(180, 0.3, "sawtooth", 0.07, 700); if (asc) beep(90, 0.5, "square", 0.06, 300); burst(px, py, asc ? 50 : 30, asc ? "#ffcf5a" : "#ff2a3a", 320, 0.6); shake = Math.max(shake, asc ? 12 : 8);
+  RN.push({ x: px, y: py, r: 0, max: asc ? 420 : 300, sp: 900, dmg: 0, hit: new Set(), col: asc ? "255,200,80" : "255,40,60", visual: true });
 }
 function triggerMeteor() {
   if (!P || state !== "play" || paused || !wl.meteor || MS || (cd.meteor || 0) > 0) { if (state === "play" && wl.meteor && cd.meteor > 0) addText(P.x, P.y - 38, "Meteor ready in " + Math.ceil(cd.meteor) + "s", "#ffb080", 13); return; }
@@ -1693,11 +1742,11 @@ function update(dt) {
         }
       }
     } else if (s.k === "blade" && s.ring) {
-      s.t += dt; s.life -= dt; s.spin += dt * 9; s.x = P.x; s.y = P.y;
-      const f = Math.min(1, s.t / 1.8); s.rad = 30 + 560 * Math.pow(f, 0.75); s.pts.length = 0;
-      for (let i = 0; i < 6; i++) { const a = s.spin + i * TAU / 6; s.pts.push({ x: P.x + Math.cos(a) * s.rad, y: P.y + Math.sin(a) * s.rad, a }); }
+      s.t += dt; s.life -= dt; s.spin += dt * (s.asc ? 7 : 8); s.x = P.x; s.y = P.y;
+      const f = Math.min(1, s.t / s.dur), R = s.asc ? 760 : 600; s.rad = 30 + R * Math.pow(f, 0.72); s.pts.length = 0;
+      for (let i = 0; i < s.n; i++) { const two = s.asc && i % 2; const a = (two ? -s.spin * 1.3 : s.spin) + i * TAU / s.n, rr = two ? s.rad * 0.62 : s.rad; s.pts.push({ x: P.x + Math.cos(a) * rr, y: P.y + Math.sin(a) * rr, a, rr, two }); }
       for (const p of s.pts) {
-        if (PT.length < 500 && Math.random() < 0.8) PT.push({ x: p.x, y: p.y, vx: rnd(-30, 30), vy: rnd(-30, 30), life: 0.35, max: 0.35, color: "#ff2a3a", sz: 4 });
+        if (PT.length < 500 && Math.random() < 0.9) PT.push({ x: p.x, y: p.y, vx: rnd(-40, 40), vy: rnd(-40, 40), life: 0.45, max: 0.45, color: s.asc && Math.random() < 0.5 ? "#ffcf5a" : "#ff2a3a", sz: 4 });
         for (const e of E) {
           if (e.dead || s.hit.has(e) || (e.type === "mole" && (e.st === "dig" || e.st === "under" || e.st === "warn"))) continue;
           if (Math.hypot(e.x - p.x, e.y - p.y) < e.r + s.r) {
@@ -1707,10 +1756,10 @@ function update(dt) {
               burst(e.x, e.y - 45, 60, "#ff2a3a", 360, 0.9); banner = { text: "✂ THE SHADOWCASTER IS SEVERED! ✂", life: 3, color: "#ff6a7a" }; addText(e.x, e.y - 170, "SEVERED!", "#ff4a5a", 26);
             }
             else if (isBig(e) && !(e.stunT > 0)) { e.stunT = 5; shake = Math.max(shake, 10); burst(e.x, e.y - 20, 30, "#8feaff", 280, 0.7); addText(e.x, e.y - e.r - 40, "STUNNED!", "#8feaff", 22); sfx.boom(); }
-            if (isBig(e)) dmgEnemy(e, e.maxhp * 0.06, Math.cos(p.a), Math.sin(p.a), 0, true);
-            else { const floorHp = e.maxhp * 0.25; if (e.hp > floorHp) e.hp = floorHp; }
-            e.flash = 0.12; burst(e.x, e.y, 12, "#ff3a4a", 180, 0.45);
-            addText(e.x, e.y - e.r - 12, isBig(e) ? "SLICED" : "25% REMAINING", "#ff5a6a", 12); sfx.hit();
+            if (isBig(e)) dmgEnemy(e, e.maxhp * (s.asc ? 0.12 : 0.08), Math.cos(p.a), Math.sin(p.a), 0, true);
+            else { const fl = s.asc ? 0.1 : 0.2, floorHp = e.maxhp * fl; if (e.hp > floorHp) e.hp = floorHp; }
+            e.flash = 0.12; burst(e.x, e.y, 14, s.asc ? "#ffcf5a" : "#ff3a4a", 200, 0.5);
+            addText(e.x, e.y - e.r - 12, isBig(e) ? "SLICED" : (s.asc ? "10% REMAINING" : "20% REMAINING"), s.asc ? "#ffd86a" : "#ff5a6a", 12); sfx.hit();
           }
         }
       }
@@ -2287,18 +2336,7 @@ function drawWorld() {
   for (const s of S) {
     if (s.k === "bolt" && s.knife) { const an = Math.atan2(s.vy, s.vx); ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(an); ctx.scale(2.1, 2.1); ctx.fillStyle = "rgba(200,230,255,.3)"; ctx.fillRect(-16, -3, 14, 6); ctx.fillStyle = "#eaf6ff"; ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-5, -4); ctx.lineTo(-5, 4); ctx.closePath(); ctx.fill(); ctx.fillStyle = "#8a6a4a"; ctx.fillRect(-10, -2, 5, 4); ctx.restore(); }
     else if (s.k === "bolt") { ctx.fillStyle = s.glow || "rgba(160,120,255,.35)"; ctx.beginPath(); ctx.arc(s.x, s.y, 11, 0, TAU); ctx.fill(); ctx.fillStyle = s.col || "#fff"; ctx.beginPath(); ctx.arc(s.x, s.y, 5, 0, TAU); ctx.fill(); }
-    else if (s.k === "blade" && s.ring) {
-      ctx.save(); ctx.lineCap = "round";
-      ctx.strokeStyle = "rgba(255,40,60,.22)"; ctx.lineWidth = 16; ctx.beginPath(); ctx.arc(s.x, s.y, s.rad, 0, TAU); ctx.stroke();
-      ctx.strokeStyle = "rgba(255,80,90,.35)"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(s.x, s.y, s.rad, 0, TAU); ctx.stroke();
-      for (const p of s.pts) {
-        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(s.spin * 3.5); ctx.shadowColor = "#ff1a30"; ctx.shadowBlur = 24;
-        ctx.fillStyle = "#c4101e"; ctx.strokeStyle = "#ffb0b8"; ctx.lineWidth = 2.5; ctx.beginPath();
-        for (let i = 0; i < 12; i++) { const a = i * TAU / 12, rr = i % 2 ? s.r * 0.3 : s.r * 1.5; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
-        ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle = "#2a0006"; ctx.beginPath(); ctx.arc(0, 0, s.r * 0.28, 0, TAU); ctx.fill(); ctx.restore();
-      }
-      ctx.restore();
-    }
+    else if (s.k === "blade" && s.ring) { drawBladeRing(s); }
     else if (s.k === "blade") { ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.spin); ctx.shadowColor = "#72e8ff"; ctx.shadowBlur = 18; ctx.fillStyle = "#dffaff"; ctx.strokeStyle = "#4ccfff"; ctx.lineWidth = 4; ctx.beginPath(); for (let i = 0; i < 8; i++) { const a = i * TAU / 8, rr = i % 2 ? s.r * 0.35 : s.r * 1.35; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore(); }
     else if (s.k === "fire") { ctx.fillStyle = "rgba(255,120,40,.35)"; ctx.beginPath(); ctx.arc(s.x, s.y, 14, 0, TAU); ctx.fill(); ctx.fillStyle = "#ffb04a"; ctx.beginPath(); ctx.arc(s.x, s.y, 8, 0, TAU); ctx.fill(); ctx.fillStyle = "#fff3b0"; ctx.beginPath(); ctx.arc(s.x, s.y, 4, 0, TAU); ctx.fill(); }
     else { ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.spin); ctx.fillStyle = "#e8f4ff"; ctx.strokeStyle = "#6fb4ff"; ctx.lineWidth = 3;
@@ -2794,6 +2832,7 @@ const RB_ITEMS = [
   { id: "wind", icon: "💫", name: "Extra Second Wind", d: "+1 Second Wind per run", max: 2, cost: r => 6 + 6 * r },
   { id: "orb", icon: "🔮", name: "Orb Fortune", d: "+20% orb income per rank", max: 5, cost: r => 3 + 2 * r },
   { id: "xp", icon: "📈", name: "Rebirth Scholar", d: "+25% XP gain per rank", max: 5, cost: r => 2 + 2 * r },
+  { id: "ascend", icon: "⚔️", name: "Ascended Rift Blade", d: "Start with the Rift Blade: 12 blades, 2 rings, 10s cooldown. Permanent!", max: 1, cost: () => 200 },
   { id: "aegis", icon: "🛡", name: "Aegis Start", d: "Every run begins inside an Aegis dome", max: 2, cost: r => 5 + 5 * r },
 ];
 const rbCanRebirth = () => [0, 1, 2, 3, 4].some(d => (bests[bkey(d, 3, false)] || {}).w);
@@ -2929,11 +2968,11 @@ function drawSettingsScreen() {
   }
   button(x, y, pw, 40, "💾  SAVE DATA  ·  Export / Import", () => { state = "savedata"; }, "#9fe6ff", 13); y += 52;
   panel(x, y, pw, 124, "rgba(15,22,32,.95)", "#3b5268");
-  txt("CHANGELOG · v3.0.1", x + 16, y + 18, 13, "#ffd23f", "left");
-  txt("• Timer hits 0 = game over (no overtime)", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
-  txt("• Each rebirth makes stages far harder", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
-  txt("• Lakes & rivers (rivers slow you down)", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
-  txt("• ShadowCaster Phase 2 (1.5× harder)", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
+  txt("CHANGELOG · v3.1.0", x + 16, y + 18, 13, "#ffd23f", "left");
+  txt("• Fixed 10:00 timer (game over at 0)", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
+  txt("• Rift Blade overhaul: new look + stronger", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
+  txt("• Ascended Rift Blade: 200 ⟳, kept forever", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
+  txt("• Rebirth · lakes · ShadowCaster phase 2", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
   txt("• Final bosses · ShadowCaster · autosave every 10s", x + 16, y + 111, 10.5, "#d8e6f2", "left", 600); y += 134;
   button(W / 2 - 100, Math.min(H - 52, y + 4), 200, 40, "‹  Back", closeSettings, "#6bf0b0", 15);
 }
