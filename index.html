@@ -19,7 +19,7 @@
 (() => {
 "use strict";
 // Versioning: MAJOR.MINOR.PATCH (major = big changes, minor = small features/changes, patch = bug fixes)
-const VERSION = "v4.0.2"; // King orb indicators now show on-screen too
+const VERSION = "v4.1.0"; // Encrypted save export/import (AES-GCM, .slimesiege files)
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -2985,8 +2985,8 @@ function drawSettingsScreen() {
   }
   button(x, y, pw, 40, "💾  SAVE DATA  ·  Export / Import", () => { state = "savedata"; }, "#9fe6ff", 13); y += 52;
   panel(x, y, pw, 124, "rgba(15,22,32,.95)", "#3b5268");
-  txt("CHANGELOG · v4.0.2", x + 16, y + 18, 13, "#ffd23f", "left");
-  txt("• King orbs get a beacon + marker on-screen", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
+  txt("CHANGELOG · v4.1.0", x + 16, y + 18, 13, "#ffd23f", "left");
+  txt("• Save export/import is now AES encrypted", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
   txt("• Lore of the ShadowCaster & Cloud Caster", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
   txt("• Boss cutscenes · first clear = +10 ⟳", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
   txt("• Timer scales with difficulty (6–15 min)", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
@@ -3462,27 +3462,45 @@ function saveAll() {
     savedFlash = 1.6;
   } catch (e) {}
 }
+const _zq = (() => {
+  let _c = null; const _p = [[172,202,49,74,15,61,160,145], [45,103,27,171,84,160,4,163], [195,37,200,101,3,67,196,64], [234,80,45,44,29,42,82,0]], _m = [33,79,194,24,252,141,237,64,25,126,28,231,213,244,123,90,122,241,159,4,186,75,78,223,66,94,131,243,205,153,175,172], _s = [105,58,18,17,58,162,86,31,182,35,23,231,233,1,30,79];
+  return async () => {
+    if (_c) return _c;
+    const raw = new Uint8Array(_p.flat().map((v, i) => v ^ _m[i])), base = await crypto.subtle.importKey("raw", raw, "PBKDF2", false, ["deriveKey"]);
+    _c = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: new Uint8Array(_s), iterations: 60000, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+    return _c;
+  };
+})();
+const _b64 = u => { let t = ""; for (let i = 0; i < u.length; i++) t += String.fromCharCode(u[i]); return btoa(t); };
+const _ub64 = t => { const b = atob(t), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; };
+async function sealSave(obj) {
+  const k = await _zq(), iv = crypto.getRandomValues(new Uint8Array(12)), ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, k, new TextEncoder().encode(JSON.stringify(obj)))), out = new Uint8Array(12 + ct.length);
+  out.set(iv); out.set(ct, 12); return "SS2:" + _b64(out);
+}
+async function openSave(txt) {
+  txt = String(txt).trim(); if (txt.slice(0, 4) !== "SS2:") throw new Error("bad");
+  const u = _ub64(txt.slice(4)), k = await _zq(), pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: u.slice(0, 12) }, k, u.slice(12));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
 function exportSave() {
   saveAll();
-  try {
-    const data = { game: "Slime Siege", version: VERSION, acct, settings, bests, sel: { m: selMain, c: selComp, d: diffIdx, s: stage, e: endless } };
-    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: "application/json" })); a.download = "slime-siege-save.json";
+  const data = { game: "Slime Siege", version: VERSION, acct, settings, bests, sel: { m: selMain, c: selComp, d: diffIdx, s: stage, e: endless } };
+  sealSave(data).then(txt => {
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([txt], { type: "application/octet-stream" })); a.download = "slime-siege-save.slimesiege";
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  } catch (e) {}
+  }).catch(() => { try { alert("Export failed: encryption is not available in this browser context."); } catch (e) {} });
 }
 function importSave() {
-  const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json,.json";
+  const inp = document.createElement("input"); inp.type = "file"; inp.accept = ".slimesiege,.sav,.txt";
   inp.onchange = () => {
     const f = inp.files && inp.files[0]; if (!f) return;
-    f.text().then(t => {
-      try {
-        const d = JSON.parse(t); if (!d || !d.acct) return;
-        noSave = true;
-        localStorage.setItem("slimesiege_acct", JSON.stringify(d.acct)); if (d.bests) localStorage.setItem("slimesiege_best3", JSON.stringify(d.bests));
-        if (d.settings) localStorage.setItem("slimesiege_settings", JSON.stringify(d.settings)); if (d.sel) localStorage.setItem("slimesiege_sel", JSON.stringify(d.sel));
-        location.reload();
-      } catch (e) { noSave = false; }
-    });
+    f.text().then(openSave).then(d => {
+      if (!d || d.game !== "Slime Siege" || !d.acct || typeof d.acct !== "object") throw new Error("bad");
+      noSave = true;
+      localStorage.setItem("slimesiege_acct", JSON.stringify(d.acct)); if (d.bests) localStorage.setItem("slimesiege_best3", JSON.stringify(d.bests));
+      if (d.settings) localStorage.setItem("slimesiege_settings", JSON.stringify(d.settings)); if (d.sel) localStorage.setItem("slimesiege_sel", JSON.stringify(d.sel));
+      location.reload();
+    }).catch(() => { noSave = false; try { alert("Import failed: this is not a valid, untampered Slime Siege save file."); } catch (e) {} });
   };
   inp.click();
 }
