@@ -19,7 +19,7 @@
 (() => {
 "use strict";
 // Versioning: MAJOR.MINOR.PATCH (major = big changes, minor = small features/changes, patch = bug fixes)
-const VERSION = "v3.1.1"; // Timer scales with difficulty
+const VERSION = "v4.0.0"; // Story Mode with cutscenes: the lore of the ShadowCaster & Cloud Caster
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -207,7 +207,7 @@ let diffIdx = 1, DF = DIFFS[1], run = { absorbed: 0, healed: 0 }, endNote = "", 
 const menuS = { s: 0, max: 0 }, grids = { cat: { s: 0, max: 0 }, rec: { s: 0, max: 0 } };
 let uiLock = false, catFilter = "all", recChoices = [], recAll = false;
 try { const bb = JSON.parse(localStorage.getItem("slimesiege_best3") || "{}"); if (bb && typeof bb === "object") bests = bb; } catch (e) {}
-let acct = { xp: 0, up: {}, wiz: {}, slimency: 0, orbProgress: 0, shop: {}, wizards: { Atlas: true }, rebirths: 0, tokens: 0, rb: {} };
+let acct = { xp: 0, up: {}, wiz: {}, slimency: 0, orbProgress: 0, shop: {}, wizards: { Atlas: true }, rebirths: 0, tokens: 0, rb: {}, storyCh: 0, storyClear: false };
 let selectedWizardUpgrade = "Atlas", upgradeTab = "stats", settingsReturnState = "menu";
 let settings = { autoKing: false, autoSkip: false, fov: 1 };
 try { const ss = JSON.parse(localStorage.getItem("slimesiege_settings") || "null"); if (ss) settings = { autoKing: !!ss.autoKing, autoSkip: !!ss.autoSkip, fov: clamp(Number(ss.fov) || 1, 0.75, 1.3) }; } catch (e) {}
@@ -218,11 +218,11 @@ function buyWizard(c) {
   if (acctInfo().lvl < c.lv) { if (state === "play" && TX) addText(P?.x || 0, (P?.y || 0) - 25, "Unlock at Level " + c.lv, "#ff9a9a", 14); beep(150, 0.15, "square", 0.05); return false; }
   acct.wizards[c.name] = true; saveAcct(); beep(720, 0.12, "triangle", 0.06); return true;
 }
-try { const aa = JSON.parse(localStorage.getItem("slimesiege_acct") || "null"); if (aa && aa.xp > 0) acct.xp = aa.xp; if (aa && aa.up) acct.up = aa.up; if (aa && aa.wiz) acct.wiz = aa.wiz; if (aa && Number.isFinite(aa.slimency)) acct.slimency = aa.slimency; if (aa && Number.isFinite(aa.orbProgress)) acct.orbProgress = aa.orbProgress; if (aa && aa.shop) acct.shop = aa.shop; if (aa && aa.wizards) acct.wizards = aa.wizards; if (aa && Number.isFinite(aa.rebirths)) acct.rebirths = aa.rebirths; if (aa && Number.isFinite(aa.tokens)) acct.tokens = aa.tokens; if (aa && aa.rb && typeof aa.rb === "object") acct.rb = aa.rb; } catch (e) {}
+try { const aa = JSON.parse(localStorage.getItem("slimesiege_acct") || "null"); if (aa && aa.xp > 0) acct.xp = aa.xp; if (aa && aa.up) acct.up = aa.up; if (aa && aa.wiz) acct.wiz = aa.wiz; if (aa && Number.isFinite(aa.slimency)) acct.slimency = aa.slimency; if (aa && Number.isFinite(aa.orbProgress)) acct.orbProgress = aa.orbProgress; if (aa && aa.shop) acct.shop = aa.shop; if (aa && aa.wizards) acct.wizards = aa.wizards; if (aa && Number.isFinite(aa.rebirths)) acct.rebirths = aa.rebirths; if (aa && Number.isFinite(aa.tokens)) acct.tokens = aa.tokens; if (aa && aa.rb && typeof aa.rb === "object") acct.rb = aa.rb; if (aa && Number.isFinite(aa.storyCh)) acct.storyCh = aa.storyCh; if (aa) acct.storyClear = !!aa.storyClear; } catch (e) {}
 if (!acct.wizards || typeof acct.wizards !== "object") acct.wizards = { Atlas: true };
 if (!Object.keys(acct.wizards).length) acct.wizards.Atlas = true;
 if (!acct.wizards.Atlas) acct.wizards.Atlas = true;
-acct.slimency = Math.max(0, Number(acct.slimency) || 0); acct.orbProgress = clamp(Number(acct.orbProgress) || 0, 0, 99.99); if (!acct.shop || typeof acct.shop !== "object") acct.shop = {}; acct.rebirths = Math.max(0, acct.rebirths | 0); acct.tokens = Math.max(0, Math.floor(acct.tokens) || 0); if (!acct.rb || typeof acct.rb !== "object") acct.rb = {};
+acct.slimency = Math.max(0, Number(acct.slimency) || 0); acct.orbProgress = clamp(Number(acct.orbProgress) || 0, 0, 99.99); if (!acct.shop || typeof acct.shop !== "object") acct.shop = {}; acct.rebirths = Math.max(0, acct.rebirths | 0); acct.tokens = Math.max(0, Math.floor(acct.tokens) || 0); if (!acct.rb || typeof acct.rb !== "object") acct.rb = {}; acct.storyCh = Math.max(0, Math.min(3, acct.storyCh | 0)); acct.storyClear = !!acct.storyClear;
 const lvNeed = l => 120 + 60 * l;
 function acctInfo(xp = acct.xp) { let l = 0, r = xp; while (r >= lvNeed(l) && l < 99) { r -= lvNeed(l); l++; } return { lvl: l, cur: Math.floor(r), need: lvNeed(l) }; }
 const rbRank = id => (acct.rb && acct.rb[id]) | 0;
@@ -299,10 +299,10 @@ function startGame(h) {
   for (const n of selComp) addComp(n, true);
   for (let i = 0; i < 2; i++) { const [mx0, my0] = ringPos(rnd(300, 600)), [mx, my] = clearSpot(mx0, my0); G.push({ x: mx, y: my, v: 0, t: "medkit" }); }
 }
-function toMenu() { paused = false; state = "menu"; menuS.s = 0; }
+function toMenu() { paused = false; storyMode = false; cs = null; state = "menu"; menuS.s = 0; }
 function startFromMenu() {
   selComp = selComp.filter(n => { const c = CATALOG.find(q => q.name === n); return c && isUnlocked(c); }).slice(0, slots());
-  if (!stageUnlocked(stage)) stage = 1;
+  if (!storyMode && !stageUnlocked(stage)) stage = 1;
   try { localStorage.setItem("slimesiege_sel", JSON.stringify({ m: selMain, c: selComp, d: diffIdx, s: stage, e: endless })); } catch (e) {}
   startGame(HEROES[selMain]);
 }
@@ -541,6 +541,7 @@ function shadowPhase2(e) {
   banner = { text: "☠ THE SHADOWCASTER ASCENDS — PHASE 2! ☠", life: 3.5, color: "#ff4a63" };
   addText(e.x, e.y - 180, "1.5× STRONGER", "#ff6a7a", 22);
   shadowSummon(e, true);
+  if (storyMode && !storySeen.p2) { storySeen.p2 = 1; playScenes(SC.shadowP2, null, true); }
 }
 function killEnemy(e) {
   if (e.type === "shadow" && !e.p2) { shadowPhase2(e); return; }
@@ -1481,7 +1482,7 @@ function update(dt) {
   medT -= dt;
   if (medT <= 0) { medT = rnd(9, 14) / DF.med; if (G.filter(g => g.t === "medkit").length < 3) { const [mx3, my3] = ringPos(rnd(380, 900)), [mx2, my2] = clearSpot(mx3, my3); G.push({ x: mx2, y: my2, v: 0, t: "medkit" }); } }
   if (P.hp > 0 && P.hp < st.maxhp) P.hp = Math.min(st.maxhp, P.hp + st.maxhp * 0.003 * dt);
-  updateCompanions(dt); updateFriendlySlimes(dt); updatePets(dt); updateAegis(dt); updateWaves(dt); updateSafeZones(dt); updateRad(dt); if (flashT > 0) flashT -= dt * 1.2; P.rdCD = Math.max(0, P.rdCD - dt);
+  updateCompanions(dt); updateFriendlySlimes(dt); updatePets(dt); updateAegis(dt); updateWaves(dt); if (storyMode) storyWatch(); updateSafeZones(dt); updateRad(dt); if (flashT > 0) flashT -= dt * 1.2; P.rdCD = Math.max(0, P.rdCD - dt);
   for (const d of PD) d.life -= dt; PD = PD.filter(d => d.life > 0);
   // spawning
   if (freeze <= 0) spawnT -= dt;
@@ -2704,7 +2705,7 @@ function drawMenu() {
   let y = 12;
   const ts = clamp(W / 9, 34, 64);
   txt("Slime Siege", W / 2, y + ts / 2 + Math.sin(menuT * 2) * 3, ts, "#6bf0b0"); y += ts + 6;
-  txt(endless ? "Endless: no win, no time limit. See how long you can last." : "Pick a wizard and difficulty. Each run lasts a random 5–10 minutes.", W / 2, y + 6, clamp(W / 34, 11, 16), "#d8e6f2", "center", 600);
+  txt(endless ? "Endless: no win, no time limit. See how long you can last." : "Pick a wizard and difficulty. Run length: 6–15 min (longer on harder modes).", W / 2, y + 6, clamp(W / 34, 11, 16), "#d8e6f2", "center", 600);
   txt(endless ? "A King every 2:30; every 3rd King summons the Cowboy Spider." : "Win: slay " + reqNeeded() + " " + reqName() + ", then " + (finalPlan().length > 2 ? "ALL final bosses" : finalNames()), W / 2, y + 26, clamp(W / 38, 11, 14), "#ffb0b8", "center", 700); y += 46;
   { const ai = acctInfo(), ph2 = 62; panel(x0, y, colW, ph2, "rgba(15,22,32,.9)", "#c9a8ff");
     txt("⭐ Wizard Level " + ai.lvl, x0 + 16, y + 17, 16, "#fff", "left");
@@ -2719,6 +2720,11 @@ function drawMenu() {
   { const uh = 42, hv = inside(x0, y, colW, uh); panel(x0, y, colW, uh, hv ? "rgba(50,34,86,.97)" : "rgba(26,16,44,.92)", "#c9a8ff");
     txt("⟳  Rebirth", x0 + 16, y + 22, 16, "#fff", "left"); txt("⟳ " + acct.tokens + " tokens" + (acct.rebirths ? " · rebirths " + acct.rebirths : "") + "  ›", x0 + colW - 16, y + 22, 12, "#c9a8ff", "right", 700);
     hit(x0, y, colW, uh, () => { state = "rebirth"; rbS.s = 0; rbArm = false; beep(520, 0.08, "triangle", 0.05); }); y += uh + 8; }
+  { const uh = 46, hv = inside(x0, y, colW, uh), lab = acct.storyClear ? "★ Cleared · replay Ch. " + Math.max(1, acct.storyCh) : acct.storyCh ? "Continue · Chapter " + acct.storyCh : "Begin the tale";
+    panel(x0, y, colW, uh, hv ? "rgba(96,58,26,.97)" : "rgba(52,32,16,.93)", "#ffb86b");
+    txt("📖  Story Mode", x0 + 16, y + 23, 16, "#fff", "left"); txt(lab + "  ›", x0 + colW - 16, y + 23, 12, "#ffd9a0", "right", 700);
+    hit(x0, y, colW, uh, () => { beep(520, 0.08, "triangle", 0.05); startStory(false); }); y += uh + 8;
+    if (acct.storyCh > 0) { const u2 = 32, hv2 = inside(x0, y, colW, u2); panel(x0, y, colW, u2, hv2 ? "rgba(96,58,26,.97)" : "rgba(40,26,14,.9)", "#8a6a44"); txt("↺  Restart story from Chapter I", x0 + colW / 2, y + 16, 12, "#d8b88a", "center", 700); hit(x0, y, colW, u2, () => startStory(true)); y += u2 + 8; } }
   txt("WIZARD", x0, y + 6, 13, "#ffd23f", "left"); y += 22;
   if (colW >= 600) {
     const cw = (colW - gap * 2) / 3, ch = 210;
@@ -2968,12 +2974,12 @@ function drawSettingsScreen() {
   }
   button(x, y, pw, 40, "💾  SAVE DATA  ·  Export / Import", () => { state = "savedata"; }, "#9fe6ff", 13); y += 52;
   panel(x, y, pw, 124, "rgba(15,22,32,.95)", "#3b5268");
-  txt("CHANGELOG · v3.1.1", x + 16, y + 18, 13, "#ffd23f", "left");
-  txt("• Timer scales: Easy 6m … Impossible 15m", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
-  txt("• Rift Blade overhaul: new look + stronger", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
-  txt("• Ascended Rift Blade: 200 ⟳, kept forever", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
-  txt("• Rebirth · lakes · ShadowCaster phase 2", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
-  txt("• Final bosses · ShadowCaster · autosave every 10s", x + 16, y + 111, 10.5, "#d8e6f2", "left", 600); y += 134;
+  txt("CHANGELOG · v4.0.0", x + 16, y + 18, 13, "#ffd23f", "left");
+  txt("• STORY MODE: 3 chapters with cutscenes", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
+  txt("• Lore of the ShadowCaster & Cloud Caster", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
+  txt("• Boss cutscenes · first clear = +10 ⟳", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
+  txt("• Timer scales with difficulty (6–15 min)", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
+  txt("• Rebirth · Ascended Rift Blade · lakes", x + 16, y + 111, 10.5, "#d8e6f2", "left", 600); y += 134;
   button(W / 2 - 100, Math.min(H - 52, y + 4), 200, 40, "‹  Back", closeSettings, "#6bf0b0", 15);
 }
 function drawShopScreen() {
@@ -3007,7 +3013,7 @@ function drawResetConfirm(stageNo) {
     txt("Last chance. All saved game progress will be lost.", W / 2, y + 100, 13, "#fff");
     button(x + 24, y + 180, (pw - 60) / 2, 44, "YES, RESET ALL", () => {
       try { ["slimesiege_acct", "slimesiege_best3", "slimesiege_best", "slimesiege_sel", "slimesiege_settings"].forEach(k => localStorage.removeItem(k)); } catch (e) {}
-      acct = { xp: 0, up: {}, wiz: {}, slimency: 0, orbProgress: 0, shop: {}, wizards: { Atlas: true }, rebirths: 0, tokens: 0, rb: {} }; bests = {}; best = 0; selComp = []; selMain = 0; stage = 1; diffIdx = 1; endless = false; settings = { autoKing: false, autoSkip: false, fov: 1 }; saveAcct(); saveSettings(); state = "menu"; menuS.s = 0;
+      acct = { xp: 0, up: {}, wiz: {}, slimency: 0, orbProgress: 0, shop: {}, wizards: { Atlas: true }, rebirths: 0, tokens: 0, rb: {}, storyCh: 0, storyClear: false }; bests = {}; best = 0; selComp = []; selMain = 0; stage = 1; diffIdx = 1; endless = false; settings = { autoKing: false, autoSkip: false, fov: 1 }; saveAcct(); saveSettings(); state = "menu"; menuS.s = 0;
     }, "#ff5368", 13);
     button(x + 36 + (pw - 60) / 2, y + 180, (pw - 60) / 2, 44, "CANCEL", () => { state = "settings"; }, "#6bf0b0", 14);
   }
@@ -3058,7 +3064,7 @@ function drawEnd(win) {
     if (lastGain.up) { txt("LEVEL UP!  Wizard level " + lastGain.lvl, cx, ly + 4, 15, "#ffd23f"); ly += 24; }
   }
   if (endNote) txt(endNote, cx, ly + 10, 18, "#ffd23f");
-  if (overT > 0.8) { const bw = (pw - 90) / 2, by = y + ph - 62; button(x + 30, by, bw, 44, "▶  Play again", startFromMenu, "#6bf0b0"); button(x + 60 + bw, by, bw, 44, "☰  Menu", toMenu, "#9fb4c6"); }
+  if (overT > 0.8) { const bw = (pw - 90) / 2, by = y + ph - 62; button(x + 30, by, bw, 44, storyMode && win ? "📖  Continue story" : "▶  Play again", storyMode && win ? storyAdvance : startFromMenu, "#6bf0b0"); button(x + 60 + bw, by, bw, 44, "☰  Menu", toMenu, "#9fb4c6"); }
 }
 
 function drawBlind() {
@@ -3072,6 +3078,7 @@ function drawBlind() {
 function render() {
   ctx.fillStyle = "#2b4a3a"; ctx.fillRect(0, 0, W, H);
   rects = []; uiLock = false;
+  if (state === "cutscene" && cs && cs.full) { drawCutscene(); return; }
   const inMenu = ["menu", "companions", "upgrades", "wizardUpgrades", "settings", "savedata", "shop", "rebirth", "resetConfirm1", "resetConfirm2"].includes(state);
   if (inMenu) { camX = Math.cos(menuT * 0.3) * 300; camY = Math.sin(menuT * 0.25) * 300; }
   else if (P) { camX = P.x; camY = P.y; }
@@ -3096,7 +3103,247 @@ function render() {
   const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.hypot(W, H) * 0.6);
   g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,.4)"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   if (P && P.hurt > 0 && state === "play") { ctx.fillStyle = `rgba(255,40,60,${P.hurt * 0.8})`; ctx.fillRect(0, 0, W, H); }
+  if (state === "cutscene" && cs) drawCutscene();
   if (savedFlash > 0) { ctx.globalAlpha = clamp(savedFlash, 0, 1) * 0.8; txt("💾 Saved", 10, H - 12, 11, "#9fe6c0", "left", 700); ctx.globalAlpha = 1; }
+}
+
+/* ================= STORY MODE ================= */
+let storyMode = false, cs = null, storySeen = {}, storyReward = "";
+const rs = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+function skyGrad(c0, c1, c2) { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, c0); g.addColorStop(0.62, c1); g.addColorStop(1, c2); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+function starsBG(n, t, a = 1) { for (let i = 0; i < n; i++) { const tw = 0.45 + 0.55 * Math.sin(t * 1.8 + i * 1.3); ctx.fillStyle = "rgba(255,255,255," + (a * tw * 0.9) + ")"; ctx.beginPath(); ctx.arc(rs(i) * W, rs(i + 99) * H * 0.75, 0.5 + rs(i + 7) * 1.5, 0, TAU); ctx.fill(); } }
+function ridge(col, base, amp, seed, t, sp) { ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(0, H); const off = t * sp; for (let x = 0; x <= W + 12; x += 12) { const xx = x + off; ctx.lineTo(x, H * base - (Math.sin(xx * 0.004 + seed) + Math.sin(xx * 0.011 + seed * 2) * 0.55 + Math.sin(xx * 0.029 + seed * 3) * 0.2) * amp); } ctx.lineTo(W, H); ctx.closePath(); ctx.fill(); }
+function glowDisc(x, y, r, c, a) { const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, "rgba(" + c + "," + a + ")"); g.addColorStop(1, "rgba(" + c + ",0)"); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); }
+function cloudBank(t, y, col, n, sp) { ctx.fillStyle = col; for (let i = 0; i < n; i++) { const x = ((rs(i + 40) * (W + 400) + t * sp * (0.5 + rs(i + 3))) % (W + 400)) - 200, yy = y + rs(i + 60) * 50, s = 60 + rs(i + 80) * 90; ctx.beginPath(); for (let k = 0; k < 5; k++) { ctx.moveTo(x + k * s * 0.5 + s * 0.45, yy); ctx.arc(x + k * s * 0.5, yy + Math.sin(k * 2 + i) * s * 0.15, s * (0.4 + 0.1 * (k % 2)), 0, TAU); } ctx.fill(); } }
+function riftCrack(cx, cy, len, t, c1, c2) {
+  const pts = []; for (let i = 0; i <= 14; i++) pts.push([cx + (rs(i + 5) - 0.5) * len * 0.45 + Math.sin(t * 1.5 + i) * 3, cy - len + i / 14 * len * 2]);
+  glowDisc(cx, cy, len * 0.9, c1, 0.28 + 0.08 * Math.sin(t * 3));
+  ctx.save(); ctx.lineJoin = "round"; ctx.shadowColor = "rgb(" + c1 + ")"; ctx.shadowBlur = 30;
+  ctx.strokeStyle = "rgba(" + c1 + ",.55)"; ctx.lineWidth = 14; ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke();
+  ctx.strokeStyle = "rgb(" + c2 + ")"; ctx.lineWidth = 4; ctx.stroke(); ctx.restore();
+  ctx.strokeStyle = "rgba(" + c2 + ",.7)"; ctx.lineWidth = 2;
+  for (let i = 2; i < 13; i += 2) { const p = pts[i], d = i % 4 ? 1 : -1; ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(p[0] + d * (30 + rs(i) * 60), p[1] + 20 + rs(i + 9) * 30); ctx.stroke(); }
+}
+function rainFx(t, n, wind) { ctx.strokeStyle = "rgba(190,210,255,.35)"; ctx.lineWidth = 1.5; ctx.beginPath(); for (let i = 0; i < n; i++) { const x = ((rs(i) * (W + 200) + t * 60 * wind) % (W + 200)) - 100, y = ((rs(i + 300) * H + t * 900 * (0.8 + rs(i + 5) * 0.5)) % (H + 80)) - 40; ctx.moveTo(x, y); ctx.lineTo(x + 8 * wind, y + 26); } ctx.stroke(); }
+function emberFx(t, n, col) { for (let i = 0; i < n; i++) { const x = rs(i + 11) * W + Math.sin(t + i) * 30, y = H - ((rs(i + 31) * H + t * (30 + rs(i) * 60)) % H); ctx.fillStyle = "rgba(" + col + "," + (0.3 + 0.5 * rs(i + 2)) + ")"; ctx.beginPath(); ctx.arc(x, y, 1 + rs(i + 6) * 2, 0, TAU); ctx.fill(); } }
+function slimeCrowd(t, y, n, col, sc) { for (let i = 0; i < n; i++) { const x = (i + 0.5) / n * W + Math.sin(i * 3.1) * 20, hop = Math.abs(Math.sin(t * 3 + i * 1.7)) * 14 * sc, s = (16 + rs(i + 70) * 18) * sc; ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(x, y - hop, s, s * (0.8 + 0.1 * Math.sin(t * 6 + i)), 0, Math.PI, TAU); ctx.fill(); ctx.fillStyle = "#ff3a4a"; ctx.fillRect(x - s * 0.4, y - hop - s * 0.5, 3, 3); ctx.fillRect(x + s * 0.2, y - hop - s * 0.5, 3, 3); } }
+function spire(x, base, w, h, col) { ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(x - w / 2, base); ctx.lineTo(x - w / 2, base - h * 0.75); ctx.lineTo(x, base - h); ctx.lineTo(x + w / 2, base - h * 0.75); ctx.lineTo(x + w / 2, base); ctx.closePath(); ctx.fill(); }
+function pineTrees(col, base, n, sz) { ctx.fillStyle = col; for (let i = 0; i < n; i++) { const x = (i + rs(i + 20)) / n * W, h = sz * (0.7 + rs(i + 30) * 0.8); ctx.beginPath(); ctx.moveTo(x - h * 0.22, H * base); ctx.lineTo(x, H * base - h); ctx.lineTo(x + h * 0.22, H * base); ctx.closePath(); ctx.fill(); } }
+const BG = {
+  cosmos(t) { skyGrad("#04030c", "#0b0820", "#150a2e"); starsBG(160, t); glowDisc(W / 2, H * 0.45, H * 0.6, "150,60,220", 0.18); riftCrack(W / 2, H * 0.42, H * 0.34, t, "170,90,255", "255,230,255"); },
+  tower(t) { skyGrad("#1a1040", "#7a3a7a", "#ffb070"); starsBG(60, t, 0.7); glowDisc(W * 0.75, H * 0.55, H * 0.5, "255,190,120", 0.35); ridge("#2a1a4a", 0.74, 70, 1.3, t, 4); ridge("#170d2e", 0.86, 50, 4.1, t, 8); spire(W * 0.5, H * 0.95, 90, H * 0.7, "#0b0618"); spire(W * 0.5 - 62, H * 0.95, 40, H * 0.46, "#0b0618"); spire(W * 0.5 + 62, H * 0.95, 40, H * 0.5, "#0b0618"); emberFx(t, 26, "255,210,120"); },
+  rift(t) { skyGrad("#1a0410", "#4a0a30", "#160208"); riftCrack(W * 0.5, H * 0.38, H * 0.45, t, "255,60,120", "255,220,235"); ridge("#0a0206", 0.84, 40, 2.2, t, 0); slimeCrowd(t, H * 0.96, 14, "#1b0714", 1.2); emberFx(t, 40, "255,90,90"); },
+  camp(t) { skyGrad("#070b1e", "#101a3a", "#1b2a3a"); starsBG(110, t); ridge("#0c1426", 0.78, 60, 3.3, t, 2); pineTrees("#070d1a", 0.9, 14, H * 0.3); const fx = W * 0.5, fy = H * 0.9; glowDisc(fx, fy, H * 0.35, "255,150,60", 0.3 + 0.08 * Math.sin(t * 9)); ctx.fillStyle = "#ffb040"; for (let k = -1; k <= 1; k++) { const hh = 22 + 10 * Math.sin(t * 8 + k * 2) + (k ? 0 : 12); ctx.beginPath(); ctx.moveTo(fx + k * 11 - 8, fy); ctx.quadraticCurveTo(fx + k * 11, fy - hh * 1.2, fx + k * 11 + 8, fy); ctx.fill(); } emberFx(t, 24, "255,170,80"); },
+  badlands(t) { skyGrad("#3a1a4a", "#d0603a", "#ffb070"); glowDisc(W * 0.3, H * 0.52, H * 0.5, "255,200,120", 0.4); ctx.fillStyle = "#ffe2a8"; ctx.beginPath(); ctx.arc(W * 0.3, H * 0.52, 44, 0, TAU); ctx.fill(); ridge("#7a2e2e", 0.68, 70, 2, t, 3); ridge("#4a1a22", 0.8, 50, 5, t, 6); ridge("#2a0e14", 0.92, 30, 7, t, 10); emberFx(t, 34, "255,200,150"); const rx = ((t * 90) % (W + 160)) - 80; ctx.strokeStyle = "#2a0e14"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(rx, H * 0.93, 16, 0, TAU); ctx.moveTo(rx - 16, H * 0.93); ctx.lineTo(rx + 16, H * 0.93); ctx.moveTo(rx, H * 0.93 - 16); ctx.lineTo(rx, H * 0.93 + 16); ctx.stroke(); },
+  storm(t) { skyGrad("#0a0f1e", "#1a2540", "#0e1424"); cloudBank(t, H * 0.14, "rgba(34,46,78,.92)", 12, 20); cloudBank(t, H * 0.3, "rgba(22,30,54,.92)", 10, 35); const k = Math.floor(t * 1.7), ph = (t * 1.7) % 1; if (rs(k + 50) > 0.5 && ph < 0.2) { const a = 1 - ph / 0.2; ctx.fillStyle = "rgba(210,225,255," + (0.35 * a) + ")"; ctx.fillRect(0, 0, W, H); ctx.strokeStyle = "rgba(240,245,255," + a + ")"; ctx.lineWidth = 3; ctx.shadowColor = "#9ac8ff"; ctx.shadowBlur = 24; ctx.beginPath(); let bx = rs(k) * W, by = 0; ctx.moveTo(bx, by); while (by < H * 0.7) { bx += rnd(-40, 40); by += 38; ctx.lineTo(bx, by); } ctx.stroke(); ctx.shadowBlur = 0; } rainFx(t, 200, 1); ridge("#05080f", 0.9, 36, 6, t, 0); },
+  spirit(t) { skyGrad("#0c1a2e", "#1d3a5e", "#2a5a7a"); glowDisc(W / 2, H * 0.4, H * 0.7, "160,220,255", 0.3); cloudBank(t, H * 0.62, "rgba(180,220,255,.12)", 10, 10); emberFx(t, 70, "180,230,255"); for (let i = 0; i < 3; i++) { ctx.strokeStyle = "rgba(190,235,255," + (0.2 - i * 0.05) + ")"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(W / 2, H * 0.45, ((t * 60 + i * 80) % 300) + 40, 0, TAU); ctx.stroke(); } },
+  citadel(t) { skyGrad("#050208", "#1a0610", "#2a0a14"); glowDisc(W * 0.72, H * 0.26, H * 0.5, "255,40,70", 0.3); ctx.fillStyle = "#b01a2a"; ctx.beginPath(); ctx.arc(W * 0.72, H * 0.26, 62, 0, TAU); ctx.fill(); ridge("#0d0408", 0.8, 50, 8, t, 0); for (let i = 0; i < 7; i++) spire(W * (0.08 + i * 0.14), H * 0.9, 50 + rs(i) * 40, H * (0.3 + rs(i + 4) * 0.35), "#07020a"); slimeCrowd(t, H * 0.97, 18, "#12040a", 1.3); emberFx(t, 50, "255,70,90"); },
+  dawn(t) { skyGrad("#5a8ad0", "#ffc08a", "#ffe6b0"); glowDisc(W * 0.5, H * 0.7, H * 0.9, "255,230,170", 0.5); ctx.save(); ctx.globalAlpha = 0.12; ctx.fillStyle = "#fff6d0"; for (let i = 0; i < 6; i++) { const a = -1.3 + i * 0.5 + Math.sin(t * 0.3 + i) * 0.05; ctx.beginPath(); ctx.moveTo(W * 0.5, H * 0.72); ctx.lineTo(W * 0.5 + Math.cos(a) * H * 1.4 - 40, H * 0.72 + Math.sin(a) * H * 1.4); ctx.lineTo(W * 0.5 + Math.cos(a) * H * 1.4 + 40, H * 0.72 + Math.sin(a) * H * 1.4); ctx.fill(); } ctx.restore(); cloudBank(t, H * 0.2, "rgba(255,245,230,.8)", 8, 14); ridge("#4a7a5a", 0.82, 40, 1.1, t, 2); ridge("#2e5a46", 0.92, 30, 3.5, t, 4); ctx.strokeStyle = "#3a2a2a"; ctx.lineWidth = 2; for (let i = 0; i < 5; i++) { const bx = ((t * 40 + i * 190) % (W + 100)) - 50, by = H * 0.25 + Math.sin(t * 2 + i) * 14 + i * 12, f = Math.sin(t * 8 + i) * 5; ctx.beginPath(); ctx.moveTo(bx - 9, by - f); ctx.quadraticCurveTo(bx - 3, by - 6, bx, by); ctx.quadraticCurveTo(bx + 3, by - 6, bx + 9, by - f); ctx.stroke(); } },
+};
+function drawRobed(x, y, s, o, t) {
+  const bob = Math.sin(t * 2 + (o.ph || 0)) * 3 * s, fy = y + bob - (o.float ? 16 * s : 0);
+  ctx.save(); ctx.translate(x, fy); ctx.scale(s * (o.flip ? -1 : 1), s);
+  ctx.strokeStyle = "#6a4a2a"; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(46, 10); ctx.lineTo(50, -128); ctx.stroke();
+  glowDisc(50, -134, 38, o.glow || "120,200,255", 0.55 + 0.15 * Math.sin(t * 3)); ctx.fillStyle = o.orb || "#9fe0ff"; ctx.beginPath(); ctx.arc(50, -134, 9, 0, TAU); ctx.fill();
+  ctx.fillStyle = o.robe; ctx.beginPath(); ctx.moveTo(-38, 8); ctx.quadraticCurveTo(-34, -60, -16, -96); ctx.lineTo(16, -96); ctx.quadraticCurveTo(34, -60, 38, 8); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = o.trim; ctx.fillRect(-38, 0, 76, 8); ctx.fillRect(-3, -92, 6, 96);
+  ctx.fillStyle = o.robe; ctx.beginPath(); ctx.moveTo(18, -84); ctx.quadraticCurveTo(52, -70, 48, -44); ctx.lineTo(40, -44); ctx.quadraticCurveTo(38, -66, 14, -72); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = o.skin || "#f1c9a0"; ctx.beginPath(); ctx.arc(0, -108, 15, 0, TAU); ctx.fill();
+  if (o.beard) { ctx.fillStyle = o.beard; ctx.beginPath(); ctx.moveTo(-14, -104); ctx.quadraticCurveTo(0, -56, 14, -104); ctx.quadraticCurveTo(0, -94, -14, -104); ctx.fill(); }
+  ctx.fillStyle = "#222"; ctx.beginPath(); ctx.arc(-5, -110, 2.2, 0, TAU); ctx.arc(5, -110, 2.2, 0, TAU); ctx.fill();
+  if (o.eyeGlow) { glowDisc(-5, -110, 11, o.eyeGlow, 0.9); glowDisc(5, -110, 11, o.eyeGlow, 0.9); }
+  if (o.hat) { ctx.fillStyle = o.hat; ctx.beginPath(); ctx.ellipse(0, -118, 26, 6, 0, 0, TAU); ctx.fill(); ctx.beginPath(); ctx.moveTo(-17, -118); ctx.quadraticCurveTo(-6, -150, 8 + Math.sin(t * 2) * 3, -172); ctx.quadraticCurveTo(14, -140, 17, -118); ctx.closePath(); ctx.fill(); ctx.fillStyle = o.trim; ctx.fillRect(-17, -124, 34, 4); }
+  else if (o.hood) { ctx.fillStyle = o.hood; ctx.beginPath(); ctx.arc(0, -110, 19, Math.PI * 1.02, Math.PI * 1.98); ctx.lineTo(15, -96); ctx.lineTo(-15, -96); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+}
+function drawHeroChar(x, y, s, t, flip) {
+  const h = HEROES[selMain] || HEROES[0], sq = Math.sin(t * 4) * 0.06;
+  ctx.save(); ctx.translate(x, y); ctx.scale(s * (flip ? -1 : 1), s);
+  ctx.fillStyle = "rgba(0,0,0,.28)"; ctx.beginPath(); ctx.ellipse(0, 2, 36, 7, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = "#6a4a2a"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(40, 0); ctx.lineTo(42, -70); ctx.stroke(); glowDisc(42, -76, 26, "255,230,150", 0.6); ctx.fillStyle = "#ffe08a"; ctx.beginPath(); ctx.arc(42, -76, 6, 0, TAU); ctx.fill();
+  ctx.fillStyle = h.color; ctx.beginPath(); ctx.ellipse(0, -28, 34 * (1 + sq), 30 * (1 - sq), 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.beginPath(); ctx.ellipse(-12, -40, 9, 5, -0.6, 0, TAU); ctx.fill();
+  ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(-11, -30, 7, 0, TAU); ctx.arc(11, -30, 7, 0, TAU); ctx.fill(); ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(-9, -29, 3.4, 0, TAU); ctx.arc(13, -29, 3.4, 0, TAU); ctx.fill();
+  ctx.fillStyle = h.hat; ctx.beginPath(); ctx.ellipse(0, -50, 30, 7, 0, 0, TAU); ctx.fill(); ctx.beginPath(); ctx.moveTo(-18, -50); ctx.quadraticCurveTo(-4, -84, 10 + Math.sin(t * 2) * 3, -104); ctx.quadraticCurveTo(16, -76, 18, -50); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#ffd23f"; ctx.fillRect(-18, -56, 36, 4);
+  ctx.restore();
+}
+function drawCasterChar(x, y, s, pal, t) { ctx.save(); ctx.translate(x, y); ctx.scale(s, s); drawCaster({ t, hp: 1, maxhp: 1 }, 0, -30, 30, false, 1, pal, false); ctx.restore(); }
+function drawCastChar(id, x, y, s, flip, t) {
+  const NIM = { robe: "#eef4ff", trim: "#7ab8ff", hood: "#dfeaff", eyeGlow: "90,170,255", orb: "#bfe4ff", glow: "140,200,255", float: true, skin: "#f4dccb", flip };
+  const UMB = { robe: "#2b1a46", trim: "#a060ff", hood: "#150c26", eyeGlow: "200,90,255", orb: "#c28bff", glow: "170,90,255", float: true, skin: "#d9c4d6", flip, ph: 2 };
+  switch (id) {
+    case "elder": drawRobed(x, y, s, { robe: "#3d5fc4", trim: "#ffd23f", hat: "#2a3d8a", beard: "#f2f2f2", orb: "#9fe0ff", glow: "120,200,255", flip }, t); break;
+    case "hero": drawHeroChar(x, y, s, t, flip); break;
+    case "nimbusY": drawRobed(x, y, s, NIM, t); break;
+    case "umbraY": drawRobed(x, y, s, UMB, t); break;
+    case "nimbusS": ctx.save(); ctx.globalAlpha *= 0.78; glowDisc(x, y - 90 * s, 150 * s, "150,210,255", 0.4); drawRobed(x, y, s, NIM, t); ctx.restore(); break;
+    case "umbraS": ctx.save(); ctx.globalAlpha *= 0.78; glowDisc(x, y - 90 * s, 150 * s, "190,120,255", 0.4); drawRobed(x, y, s, UMB, t); ctx.restore(); break;
+    case "umbra": glowDisc(x, y - 70 * s, 190 * s, "255,40,70", 0.18); drawCasterChar(x, y, s, PAL_SHADOW, t); break;
+    case "nimbus": glowDisc(x, y - 70 * s, 190 * s, "140,200,255", 0.22); drawCasterChar(x, y, s, PAL_CLOUD, t); break;
+  }
+}
+const WHO = {
+  ORIN: { n: "Archmage Orin", col: "#8fb8ff", ic: "🧙" }, HERO: { n: "", col: "#c9a8ff", ic: "🟣" }, NIMBUS: { n: "Nimbus", col: "#bfe4ff", ic: "☁️" },
+  UMBRA: { n: "Umbra", col: "#c28bff", ic: "🌑" }, SHADOW: { n: "The ShadowCaster", col: "#ff4a5a", ic: "👁" }, CLOUD: { n: "The Cloud Caster", col: "#cfe4ff", ic: "⛈" },
+};
+const fillTxt = s => String(s).replace(/\{hero\}/g, (HEROES[selMain] || HEROES[0]).name).replace(/\{reward\}/g, storyReward);
+function wrapTxt(text, maxW) { const words = text.split(" "), lines = []; let cur = ""; for (const w of words) { const t2 = cur ? cur + " " + w : w; if (ctx.measureText(t2).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t2; } if (cur) lines.push(cur); return lines; }
+function csStartBeat() {
+  const b = cs.beats[cs.i]; cs.t = 0; cs.tick = 0; cs.text = b.t ? fillTxt(b.t) : ""; cs.sub = b.title && b.title[2] ? fillTxt(b.title[2]) : "";
+  if (b.fx === "shake") { cs.shk = 1; noise(0.7, 0.18, 300); beep(55, 0.7, "sawtooth", 0.08, -15); }
+  else if (b.fx === "flash") { cs.flash = 1; noise(0.5, 0.2, 1500); beep(300, 0.4, "sawtooth", 0.06, -200); }
+  else if (b.fx === "thunder") { cs.flash = 1; cs.shk = 0.5; noise(1.1, 0.22, 500); }
+  else if (b.fx === "rift") { cs.shk = 0.4; beep(90, 0.9, "sawtooth", 0.06, 200); }
+  else if (b.fx === "chime") { beep(880, 0.5, "sine", 0.05); beep(1320, 0.7, "sine", 0.04, 0, 0.12); }
+  if (b.title) { beep(220, 0.9, "sine", 0.06); beep(330, 1.2, "sine", 0.05, 0, 0.1); beep(440, 1.4, "sine", 0.04, 0, 0.2); }
+}
+function playScenes(list, after, overlay) {
+  joy = null; paused = false;
+  cs = { beats: list.filter(Boolean), i: 0, t: 0, tick: 0, after, overlay: !!overlay, ret: overlay ? "play" : null, full: !overlay, shk: 0, flash: 0, text: "", sub: "" };
+  state = "cutscene"; csStartBeat();
+}
+function csEnd() { const a = cs.after, ov = cs.overlay; cs = null; if (ov) state = "play"; if (a) a(); }
+function csNext() { cs.i++; if (cs.i >= cs.beats.length) csEnd(); else csStartBeat(); }
+function csAdvance() { if (!cs) return; const b = cs.beats[cs.i]; if (b.title) { if (cs.t > 0.9) csNext(); return; } if (cs.t * 46 < cs.text.length) cs.t = cs.text.length / 46 + 0.01; else csNext(); }
+function csSkipAll() { if (cs) csEnd(); }
+function updateCutscene(dt) {
+  if (!cs) return; cs.t += dt; cs.shk = Math.max(0, cs.shk - dt * 0.9); cs.flash = Math.max(0, cs.flash - dt * 2.2);
+  const b = cs.beats[cs.i]; if (!b) return;
+  if (b.title) { if (cs.t > 3.8) csNext(); return; }
+  const shown = Math.floor(cs.t * 46); if (shown > cs.tick) { cs.tick = shown; if (shown % 3 === 0 && shown <= cs.text.length) beep(230 + rs(shown) * 140, 0.02, "square", 0.012); }
+}
+function drawTitleCard(b, bt) {
+  const a = clamp(Math.min(bt / 0.8, (3.8 - bt) / 0.7), 0, 1);
+  ctx.fillStyle = "rgba(0,0,0," + (0.5 * a) + ")"; ctx.fillRect(0, H * 0.3, W, H * 0.34);
+  ctx.globalAlpha = a; txt(b.title[0], W / 2, H * 0.4, clamp(W / 30, 13, 28), "#c9a8ff", "center", 700);
+  txt(b.title[1], W / 2, H * 0.49, clamp(W / 11, 24, 62), b.col || "#ffe9a0", "center", 900);
+  ctx.fillStyle = b.col || "#ffe9a0"; ctx.fillRect(W / 2 - 150 * a, H * 0.555, 300 * a, 2);
+  if (cs.sub) txt(cs.sub, W / 2, H * 0.6, clamp(W / 48, 11, 17), "#cfd8e8", "center", 600);
+  ctx.globalAlpha = 1;
+}
+function drawDialogue(b, bt, bar) {
+  const w0 = WHO[b.w], col = w0 ? w0.col : "#e8dcc0", nm = w0 ? (b.w === "HERO" ? (HEROES[selMain] || HEROES[0]).name : w0.n) : "";
+  const bw = Math.min(W - 24, 940), bx = W / 2 - bw / 2, bh = clamp(H * 0.27, 112, 190), by = H - bar - bh - 12;
+  panel(bx, by, bw, bh, "rgba(8,6,18,.9)", col);
+  let fs = clamp(W / 50, 13, 20), lines;
+  for (;;) { ctx.font = (w0 ? "600 " : "italic 500 ") + fs + "px " + FONT; lines = wrapTxt(cs.text, bw - 40); if (lines.length * fs * 1.42 <= bh - (w0 ? 40 : 24) || fs <= 10) break; fs--; }
+  const shown = Math.min(cs.text.length, Math.floor(bt * 46)); let n = 0, y = by + (w0 ? 36 : 24) + fs * 0.5;
+  ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillStyle = w0 ? "#fff" : "#e8dcc0";
+  for (const ln of lines) { const k = clamp(shown - n, 0, ln.length); if (k > 0) ctx.fillText(ln.slice(0, k), bx + 20, y); n += ln.length + 1; y += fs * 1.42; }
+  if (w0) { ctx.font = "800 13px " + FONT; const label = w0.ic + " " + nm, nw = ctx.measureText(label).width + 28; panel(bx + 16, by - 15, nw, 30, "rgba(8,6,18,.98)", col); txt(label, bx + 16 + nw / 2, by, 13, col); }
+  if (shown >= cs.text.length) { ctx.fillStyle = col; ctx.font = "800 14px " + FONT; ctx.textAlign = "right"; ctx.fillText("▼", bx + bw - 16, by + bh - 16 + Math.sin(menuT * 6) * 3); }
+}
+function drawCutscene() {
+  rects = []; const b = cs && cs.beats[cs.i]; if (!b) return;
+  const t = menuT, bt = cs.t, u = clamp(Math.min(W / 900, H / 650), 0.55, 1.4), bar = Math.round(H * 0.07);
+  ctx.save();
+  const shx = cs.shk > 0 ? rnd(-1, 1) * cs.shk * 10 : 0, shy = cs.shk > 0 ? rnd(-1, 1) * cs.shk * 10 : 0;
+  if (cs.full) { ctx.save(); ctx.translate(shx, shy); const z = 1.03 + 0.05 * Math.min(1, bt / 9); ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2); (BG[b.bg] || BG.cosmos)(t); ctx.restore(); }
+  else { ctx.fillStyle = "rgba(4,3,12,.6)"; ctx.fillRect(0, 0, W, H); }
+  ctx.save(); ctx.translate(shx, shy);
+  const gy = H * 0.59;
+  for (const c of b.cast || []) { const id = c[0], sp = b.sp && b.sp === id; ctx.globalAlpha = b.sp && !sp ? 0.55 : 1; drawCastChar(id, W * c[1], gy - (sp ? 4 * u : 0), (c[2] || 1) * u * 1.05, !!c[3], t); }
+  ctx.globalAlpha = 1; ctx.restore();
+  if (cs.flash > 0) { ctx.fillStyle = "rgba(255,255,255," + (cs.flash * 0.75) + ")"; ctx.fillRect(0, 0, W, H); }
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, bar); ctx.fillRect(0, H - bar, W, bar);
+  if (b.title) drawTitleCard(b, bt); else drawDialogue(b, bt, bar);
+  const fa = clamp(1 - bt / 0.4, 0, 1) * (cs.i === 0 ? 1 : 0.75); if (fa > 0) { ctx.fillStyle = "rgba(0,0,0," + fa + ")"; ctx.fillRect(0, 0, W, H); }
+  button(W - 112, bar + 8, 100, 30, "Skip ⏭", csSkipAll, "#9fb4c6", 12);
+  ctx.restore();
+}
+const bt_ = (bg, cast, w, t, fx, sp) => ({ bg, cast, w, t, fx, sp });
+const tt_ = (a, b, c, col, bg) => ({ title: [a, b, c], col, bg });
+const EH = [["elder", 0.28, 1.1], ["hero", 0.72, 1, true]], NU = [["nimbusY", 0.3, 1.15], ["umbraY", 0.7, 1.15, true]];
+const SC = {
+  ch1: [
+    tt_("THE STORY OF", "SLIME SIEGE", "A tale of the Rift", "#c9a8ff", "cosmos"),
+    bt_("cosmos", [], null, "Before the siege... before the slimes... there was only the Rift: a wound between worlds that no hand had ever mended.", "rift"),
+    bt_("tower", NU, null, "The Order of Wardens sealed it. Two of its greatest mages kept the watch: Nimbus, Warden of the Sky, and her brother Umbra, Warden of Shadow."),
+    bt_("tower", NU, "NIMBUS", "Every beast that crawls out of the Rift, we send back. That is our oath, brother.", null, "nimbusY"),
+    bt_("tower", NU, "UMBRA", "And when they crawl out again, and again? How long can an oath hold back a tide?", null, "umbraY"),
+    bt_("rift", [["umbraY", 0.5, 1.3]], null, "Umbra found his answer in the dark. If he could not seal the Rift, he would swallow what came through it.", "rift"),
+    bt_("rift", [["umbraY", 0.5, 1.3]], "UMBRA", "The slimes. The bats. The brutes. The bombers. I will wear them all, and then nothing will ever hurt us again.", "shake", "umbraY"),
+    bt_("rift", [["umbra", 0.5, 1.25]], null, "But the more he devoured, the less of Umbra remained. When the Rift shuddered open once more, it was not a Warden who answered. It was the ShadowCaster.", "flash"),
+    bt_("storm", [["nimbusY", 0.3, 1.15], ["umbra", 0.72, 1.15]], "NIMBUS", "Umbra, stop! There is nothing of you left in there!", "thunder", "nimbusY"),
+    bt_("storm", [["nimbusY", 0.3, 1.15], ["umbra", 0.72, 1.15]], null, "She hurled the sky itself at him. He tore her storm away and bound it into a hollow shell: the Cloud Caster. Then the Order fell, and the slimes rose.", "thunder"),
+    bt_("camp", EH, null, "Years later, one wizard remained to answer the call. You."),
+    bt_("camp", EH, "ORIN", "I am Archmage Orin, last of the Order. The Rift is open and the slimes are pouring through. Hold out until the clock runs dry, and finish what the Wardens could not.", null, "elder"),
+    bt_("camp", EH, "ORIN", "Slimes drop three glowing orbs: red, blue and yellow. Gather all three and a Slime King will answer your call. Slay three Kings, and the guardian that waits behind them.", null, "elder"),
+    bt_("camp", EH, "HERO", "Then let it quiver. I'm ready.", null, "hero"),
+    tt_("CHAPTER I", "The Slime Tide", "Slay the Kings · then the Rift's guardian", "#6bf0b0", "camp"),
+  ],
+  ch1end: [
+    bt_("camp", EH, null, "The Rift's guardian fell, and for one breath the whole world fell silent.", "chime"),
+    bt_("camp", EH, "ORIN", "Well done. But a guardian is only a gatekeeper. Something older stirs beyond the badlands.", null, "elder"),
+    bt_("badlands", EH, "ORIN", "The wastes are rotten with Rift-light. Giant spiders spin their webs across the canyons, and the Order's old rangers, twisted by the dark, hunt along the dust. Beware the Cowboy: he shoots first and never misses.", null, "elder"),
+    bt_("badlands", EH, "HERO", "And what's behind them?", null, "hero"),
+    bt_("badlands", EH, "ORIN", "A storm that should have died with its master.", "thunder", "elder"),
+  ],
+  ch2: [
+    bt_("storm", [["hero", 0.5, 1.1]], null, "The sky above the badlands turned the colour of a bruise.", "thunder"),
+    tt_("CHAPTER II", "Storm Over the Badlands", "Fell the hunters · then the Cloud Caster", "#9c8bff", "storm"),
+  ],
+  cloud2: [
+    bt_("world", [["nimbus", 0.26, 1.15], ["hero", 0.76, 1, true]], "CLOUD", "...turn back, little wizard... he made me... I cannot stop my hands...", null, "nimbus"),
+    bt_("world", [["nimbus", 0.26, 1.15], ["hero", 0.76, 1, true]], "HERO", "Someone is still in there. I can hear her.", null, "hero"),
+    bt_("world", [["nimbus", 0.26, 1.15], ["hero", 0.76, 1, true]], "CLOUD", "Then end me... and set me free.", "thunder", "nimbus"),
+  ],
+  cloud3: [
+    bt_("world", [["nimbus", 0.26, 1.15], ["hero", 0.76, 1, true]], "CLOUD", "Umbra has rebuilt my shell again... Break it, and you will weaken him!", "thunder", "nimbus"),
+  ],
+  ch2end: [
+    bt_("spirit", [["nimbusS", 0.3, 1.2], ["hero", 0.72, 1, true]], null, "The Cloud Caster unravelled into silver rain, and in its place a woman's light remained.", "chime"),
+    bt_("spirit", [["nimbusS", 0.3, 1.2], ["hero", 0.72, 1, true]], "NIMBUS", "...Thank you. For one moment the storm was mine again. I am Nimbus, once Warden of the Sky.", null, "nimbusS"),
+    bt_("spirit", [["nimbusS", 0.3, 1.2], ["hero", 0.72, 1, true]], "NIMBUS", "My brother Umbra still holds a piece of me. While he does, he can rebuild my shell again and again. But there is a weapon forged from the Rift's own edge: the Rift Blade.", null, "nimbusS"),
+    bt_("spirit", [["nimbusS", 0.3, 1.2], ["hero", 0.72, 1, true]], "NIMBUS", "When the Rift offers it to you, press B, or tap the blade. It cuts clean through every beast he wears, and holds even bosses still for a few precious breaths. Sever him, then strike with everything.", null, "nimbusS"),
+    bt_("spirit", [["nimbusS", 0.3, 1.2], ["hero", 0.72, 1, true]], "HERO", "I'll bring him home, Nimbus.", null, "hero"),
+    bt_("spirit", [["nimbusS", 0.3, 1.2], ["hero", 0.72, 1, true]], "NIMBUS", "...Do. He was a good man, once.", "chime", "nimbusS"),
+  ],
+  ch3: [
+    bt_("citadel", [["hero", 0.5, 1.1]], null, "At the end of the world, the Citadel of Shadows rose from the dust. It had no walls, only beasts of every kind, and at their centre, a figure with burning eyes.", "rift"),
+    tt_("CHAPTER III", "The ShadowCaster", "Fell the guardians · then end the Shadow", "#ff6a7a", "citadel"),
+  ],
+  shadow: [
+    bt_("world", [["umbra", 0.26, 1.2], ["hero", 0.78, 1, true]], "SHADOW", "I remember... a sister. A storm. A name. Now there is only hunger.", "rift", "umbra"),
+    bt_("world", [["umbra", 0.26, 1.2], ["hero", 0.78, 1, true]], "SHADOW", "Every beast you have slain lives in me. Come, little wizard. Add yourself to the count.", "shake", "umbra"),
+    bt_("world", [["umbra", 0.26, 1.2], ["hero", 0.78, 1, true]], "HERO", "Not today.", null, "hero"),
+  ],
+  shadowP2: [
+    bt_("world", [["umbra", 0.26, 1.25], ["hero", 0.78, 1, true]], "SHADOW", "You cut a shadow. I AM the Rift! Behold everything I have swallowed since the world began!", "flash", "umbra"),
+    bt_("world", [["nimbusS", 0.26, 1.15], ["hero", 0.78, 1, true]], "NIMBUS", "He is tearing the Rift open from within! This is his last form. Do not falter!", "chime", "nimbusS"),
+  ],
+  ending: [
+    bt_("citadel", [["umbra", 0.5, 1.25]], null, "The ShadowCaster came apart. Every slime, every bat, every brute he had ever swallowed streamed out of him like smoke.", "flash"),
+    bt_("dawn", [["umbraS", 0.5, 1.2]], "UMBRA", "Nimbus... I am sorry. I only wanted there to be no more tides.", "chime", "umbraS"),
+    bt_("dawn", [["nimbusS", 0.3, 1.2], ["umbraS", 0.7, 1.2, true]], "NIMBUS", "I know, brother. Rest now. Together, one last time.", "chime", "nimbusS"),
+    bt_("dawn", [["nimbusS", 0.3, 1.2], ["umbraS", 0.7, 1.2, true]], null, "The two Wardens stitched the Rift shut with the last of their light. The sky cleared for the first time in a hundred years.", "flash"),
+    bt_("dawn", EH, "ORIN", "You did what the whole Order could not. I am so proud of you.", null, "elder"),
+    bt_("dawn", EH, "HERO", "It's not over, is it? Rifts reopen.", null, "hero"),
+    bt_("dawn", EH, "ORIN", "They do. But so do wizards. Every legend begins again, and perhaps you will return stronger. Reborn.", "chime", "elder"),
+    tt_("THE END", "...for now", "{reward}", "#ffe9a0", "dawn"),
+  ],
+};
+function startStory(restart) {
+  storyMode = true; endless = false; if (restart) acct.storyCh = 0;
+  const ch = clamp(acct.storyCh || 1, 1, 3); stage = ch; acct.storyCh = Math.max(acct.storyCh | 0, ch); storySeen = {}; saveAcct();
+  playScenes(ch === 1 ? SC.ch1 : ch === 2 ? SC.ch1end.slice(-1).concat(SC.ch2) : SC.ch3, () => startFromMenu());
+}
+function storyAdvance() {
+  const n = stage; storySeen = {};
+  if (n >= 3) {
+    if (!acct.storyClear) { acct.storyClear = true; acct.tokens += 10; storyReward = "+10 Rebirth Tokens earned · Rebirth awaits in the menu"; } else storyReward = "Thank you for playing · Rebirth awaits in the menu";
+    acct.storyCh = 3; saveAcct(); playScenes(SC.ending, () => { toMenu(); });
+  } else {
+    stage = n + 1; acct.storyCh = Math.max(acct.storyCh | 0, stage); saveAcct();
+    playScenes(SC["ch" + n + "end"].concat(SC["ch" + stage]), () => startFromMenu());
+  }
+}
+function storyWatch() {
+  if (state !== "play" || !storyMode) return;
+  const cl = E.some(o => !o.dead && o.type === "cloud"), sh = E.some(o => !o.dead && o.type === "shadow");
+  if (cl && (stage === 2 || stage === 3) && !storySeen["cloud" + stage]) { storySeen["cloud" + stage] = 1; playScenes(SC["cloud" + stage], null, true); }
+  else if (sh && !storySeen.shadow) { storySeen.shadow = 1; playScenes(SC.shadow, null, true); }
 }
 
 /* ================= input ================= */
@@ -3118,6 +3365,8 @@ addEventListener("keydown", e => {
       if (c === "KeyB" && !paused && wl.blade) triggerBlade();
       if (c === "KeyK" && !paused) summonKing();
       if (c === "KeyP" || c === "Escape") paused = !paused;
+    } else if (state === "cutscene") {
+      if (c === "Escape") csSkipAll(); else if (c === "Enter" || c === "Space" || c === "KeyZ" || c === "ArrowRight") csAdvance();
     } else if (state === "menu") {
       if (num >= 1 && num <= HEROES.length) selMain = num - 1;
       if (c === "ArrowLeft") diffIdx = Math.max(0, diffIdx - 1);
@@ -3145,7 +3394,7 @@ addEventListener("keydown", e => {
       if (!recAll && num >= 1 && recChoices[num - 1]) recruit(recChoices[num - 1]);
       if (recAll && c === "Escape") recAll = false;
     } else if ((state === "over" || state === "win") && overT > 0.8) {
-      if (c === "Enter" || c === "Space") startFromMenu();
+      if (c === "Enter" || c === "Space") { if (storyMode && state === "win") storyAdvance(); else startFromMenu(); }
       if (c === "Escape") toMenu();
     }
   }
@@ -3161,6 +3410,7 @@ cv.addEventListener("pointermove", e => {
 cv.addEventListener("pointerdown", e => {
   audio(); pointer.x = e.clientX; pointer.y = e.clientY;
   usingMouse = e.pointerType === "mouse"; if (!usingMouse) usingTouch = true; else usingTouch = false;
+  if (state === "cutscene") { if (!clickRects()) csAdvance(); return; }
   if (state === "upgrades" || state === "wizardUpgrades" || state === "settings" || state === "savedata" || state === "shop" || state === "rebirth" || state === "resetConfirm1" || state === "resetConfirm2") { clickRects(); return; }
   if (state === "menu" || state === "companions" || state === "recruit" || state === "rebirth") { const so = scrollObj(); menuDrag = { y: e.clientY, s: so ? so.s : 0, moved: false, so }; return; }
   if (state === "level") { clickRects(); return; }
@@ -3188,6 +3438,7 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now; menuT += dt; if (savedFlash > 0) savedFlash -= dt;
   if (state === "play" && !paused) { update(dt); updateFx(dt); }
+  else if (state === "cutscene") updateCutscene(dt);
   else if (state === "over" || state === "win") { overT += dt; if (shake > 0) shake = Math.max(0, shake - dt * 28); updateFx(dt); }
   render();
   requestAnimationFrame(frame);
