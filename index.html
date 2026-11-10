@@ -19,7 +19,7 @@
 (() => {
 "use strict";
 // Versioning: MAJOR.MINOR.PATCH (major = big changes, minor = small features/changes, patch = bug fixes)
-const VERSION = "v3.1.0"; // Fixed 10:00 timer, Rift Blade overhaul, Ascended Rift Blade (rebirth shop)
+const VERSION = "v3.1.1"; // Timer scales with difficulty
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -290,7 +290,7 @@ function startGame(h) {
   P = { x: 0, y: 0, hp: stat().maxhp, stam: stat().stamMax, exh: false, stR: 0, sprint: false, rdCD: 0, inv: 0, face: 1, fx: 0, fy: 1, moving: false, hurt: 0, abCD: 0, dfCD: 0, dfT: 0, storm: 0, stormT: 0, shieldT: 0, wind: 0 }; freeze = 0; if (rbRank("aegis")) AG.push({ x: 0, y: 0, r: 205, life: 10 + 8 * rbRank("aegis"), max: 10 + 8 * rbRank("aegis"), t: 0, fl: 0 });
   E = []; S = []; ES = []; G = []; PT = []; TX = []; FX = []; RN = []; FS = [];
   time = 0; kills = 0; level = 1; xp = 0; xpNeed = 5; pending = 0; boss = null; shake = 0; hitStop = 0;
-  if (endless) { WIN_TIME = Infinity; PACE = 1.25; } else { WIN_TIME = 600; PACE = (420 + 0.35 * (WIN_TIME - 240)) / WIN_TIME; }
+  if (endless) { WIN_TIME = Infinity; PACE = 1.25; } else { WIN_TIME = [360, 480, 600, 720, 900][diffIdx] || 600; PACE = (420 + 0.35 * (WIN_TIME - 240)) / WIN_TIME; }
   kingTimes = []; kingIdx = 0; kingsKilled = 0; cowboyDead = false; cowboySpawned = false; overtime = false; SZ = []; szT = 12 * DF.safe; swarmEvery = endless ? 45 : WIN_TIME / 7; nextCowboy = 300;
   spawnT = 1; nextSwarm = swarmEvery * 0.6; nextBoss = Infinity; bossN = 0;
   banner = { text: endless ? "♾ ENDLESS — COLLECT ORBS TO SUMMON KINGS" : "SURVIVE " + fmt(WIN_TIME) + "  ·  SLAY " + reqNeeded() + " " + reqName().toUpperCase() + ", THEN " + finalNames().toUpperCase(), life: 4, color: "#fff" };
@@ -2968,8 +2968,8 @@ function drawSettingsScreen() {
   }
   button(x, y, pw, 40, "💾  SAVE DATA  ·  Export / Import", () => { state = "savedata"; }, "#9fe6ff", 13); y += 52;
   panel(x, y, pw, 124, "rgba(15,22,32,.95)", "#3b5268");
-  txt("CHANGELOG · v3.1.0", x + 16, y + 18, 13, "#ffd23f", "left");
-  txt("• Fixed 10:00 timer (game over at 0)", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
+  txt("CHANGELOG · v3.1.1", x + 16, y + 18, 13, "#ffd23f", "left");
+  txt("• Timer scales: Easy 6m … Impossible 15m", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
   txt("• Rift Blade overhaul: new look + stronger", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
   txt("• Ascended Rift Blade: 200 ⟳, kept forever", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
   txt("• Rebirth · lakes · ShadowCaster phase 2", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
