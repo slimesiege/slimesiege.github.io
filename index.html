@@ -19,7 +19,7 @@
 (() => {
 "use strict";
 // Versioning: MAJOR.MINOR.PATCH (major = big changes, minor = small features/changes, patch = bug fixes)
-const VERSION = "v4.2.0"; // Cutscenes after every stage and on rebirth
+const VERSION = "v4.3.0"; // .slimesiege is now a binary SLIME container
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -2987,9 +2987,9 @@ function drawSettingsScreen() {
   }
   button(x, y, pw, 40, "💾  SAVE DATA  ·  Export / Import", () => { state = "savedata"; }, "#9fe6ff", 13); y += 52;
   panel(x, y, pw, 124, "rgba(15,22,32,.95)", "#3b5268");
-  txt("CHANGELOG · v4.2.0", x + 16, y + 18, 13, "#ffd23f", "left");
+  txt("CHANGELOG · v4.3.0", x + 16, y + 18, 13, "#ffd23f", "left");
   txt("• Cutscenes after every stage + on rebirth", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
-  txt("• AES-encrypted .slimesiege save files", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
+  txt("• .slimesiege: binary SLIME file format", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
   txt("• Boss cutscenes · first clear = +10 ⟳", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
   txt("• Timer scales with difficulty (6–15 min)", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
   txt("• Rebirth · Ascended Rift Blade · lakes", x + 16, y + 111, 10.5, "#d8e6f2", "left", 600); y += 134;
@@ -3489,9 +3489,37 @@ const _zq = (() => {
 })();
 const _b64 = u => { let t = ""; for (let i = 0; i < u.length; i++) t += String.fromCharCode(u[i]); return btoa(t); };
 const _ub64 = t => { const b = atob(t), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; };
-async function sealSave(obj) {
-  const k = await _zq(), iv = crypto.getRandomValues(new Uint8Array(12)), ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, k, new TextEncoder().encode(JSON.stringify(obj)))), out = new Uint8Array(12 + ct.length);
-  out.set(iv); out.set(ct, 12); return "SS2:" + _b64(out);
+const _crc32 = u => { let c, crc = -1; for (let i = 0; i < u.length; i++) { c = (crc ^ u[i]) & 255; for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xEDB88320 : c >>> 1; crc = (crc >>> 8) ^ c; } return (crc ^ -1) >>> 0; };
+/* SLIME container: [32B header | n x (id u8, len u32) directory] [iv 12B] [ctLen u32] [AES-GCM ciphertext, header = AAD] [CRC32 u32] */
+async function packSave(data) {
+  const enc = new TextEncoder(), secs = [[1, data.acct], [2, data.bests || {}], [3, data.settings || {}], [4, data.sel || {}]].map(([id, o]) => [id, enc.encode(JSON.stringify(o))]);
+  const n = secs.length, hl = 32 + n * 5, h = new Uint8Array(hl), dv = new DataView(h.buffer), v = (VERSION.match(/\d+/g) || []).map(Number), A = data.acct;
+  h.set([83, 76, 73, 77, 69, 26, 1, 1]); h[8] = v[0] | 0; h[9] = v[1] | 0; h[10] = v[2] | 0; h[11] = n;
+  dv.setUint32(12, Math.floor(Date.now() / 1000)); dv.setUint16(16, (A.rebirths | 0) & 0xffff); h[18] = (A.storyCh | 0) & 255; h[19] = A.storyClear ? 1 : 0;
+  dv.setUint32(20, (A.tokens | 0) >>> 0); dv.setUint32(24, Math.floor(A.slimency || 0) >>> 0); dv.setUint16(28, acctInfo().lvl & 0xffff);
+  secs.forEach(([id, b], i) => { h[32 + i * 5] = id; dv.setUint32(33 + i * 5, b.length); });
+  const pt = new Uint8Array(secs.reduce((q, [, b]) => q + b.length, 0)); let o = 0; for (const [, b] of secs) { pt.set(b, o); o += b.length; }
+  const k = await _zq(), iv = crypto.getRandomValues(new Uint8Array(12)), ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: h }, k, pt));
+  const out = new Uint8Array(hl + 16 + ct.length + 4), od = new DataView(out.buffer);
+  out.set(h, 0); out.set(iv, hl); od.setUint32(hl + 12, ct.length); out.set(ct, hl + 16); od.setUint32(out.length - 4, _crc32(out.subarray(0, out.length - 4)));
+  return out;
+}
+async function unpackSave(u) {
+  const bad = () => new Error("bad");
+  if (u.length < 56 || u[0] !== 83 || u[1] !== 76 || u[2] !== 73 || u[3] !== 77 || u[4] !== 69 || u[5] !== 26 || u[6] !== 1) throw bad();
+  const dv = new DataView(u.buffer, u.byteOffset, u.byteLength); if (dv.getUint32(u.length - 4) !== _crc32(u.subarray(0, u.length - 4))) throw bad();
+  const n = u[11], hl = 32 + n * 5; if (n < 1 || n > 16 || u.length < hl + 20) throw bad();
+  const h = u.slice(0, hl), iv = u.slice(hl, hl + 12), cl = dv.getUint32(hl + 12); if (hl + 16 + cl + 4 !== u.length) throw bad();
+  const pt = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv, additionalData: h }, await _zq(), u.slice(hl + 16, hl + 16 + cl)));
+  const dec = new TextDecoder(), out = {}; let o = 0;
+  for (let i = 0; i < n; i++) { const id = h[32 + i * 5], len = new DataView(h.buffer).getUint32(33 + i * 5); if (o + len > pt.length) throw bad(); out[id] = JSON.parse(dec.decode(pt.subarray(o, o + len))); o += len; }
+  if (o !== pt.length || !out[1]) throw bad();
+  return { game: "Slime Siege", acct: out[1], bests: out[2], settings: out[3], sel: out[4] };
+}
+async function openSaveFile(buf) {
+  const u = new Uint8Array(buf);
+  if (u[0] === 83 && u[1] === 83 && u[2] === 50 && u[3] === 58) return openSave(new TextDecoder().decode(u));
+  return unpackSave(u);
 }
 async function openSave(txt) {
   txt = String(txt).trim(); if (txt.slice(0, 4) !== "SS2:") throw new Error("bad");
@@ -3501,8 +3529,8 @@ async function openSave(txt) {
 function exportSave() {
   saveAll();
   const data = { game: "Slime Siege", version: VERSION, acct, settings, bests, sel: { m: selMain, c: selComp, d: diffIdx, s: stage, e: endless } };
-  sealSave(data).then(txt => {
-    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([txt], { type: "application/octet-stream" })); a.download = "slime-siege-save.slimesiege";
+  packSave(data).then(bytes => {
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" })); a.download = "slime-siege-save.slimesiege";
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }).catch(() => { try { alert("Export failed: encryption is not available in this browser context."); } catch (e) {} });
 }
@@ -3510,7 +3538,7 @@ function importSave() {
   const inp = document.createElement("input"); inp.type = "file"; inp.accept = ".slimesiege,.sav,.txt";
   inp.onchange = () => {
     const f = inp.files && inp.files[0]; if (!f) return;
-    f.text().then(openSave).then(d => {
+    f.arrayBuffer().then(openSaveFile).then(d => {
       if (!d || d.game !== "Slime Siege" || !d.acct || typeof d.acct !== "object") throw new Error("bad");
       noSave = true;
       localStorage.setItem("slimesiege_acct", JSON.stringify(d.acct)); if (d.bests) localStorage.setItem("slimesiege_best3", JSON.stringify(d.bests));
