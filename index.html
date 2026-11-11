@@ -19,7 +19,7 @@
 (() => {
 "use strict";
 // Versioning: MAJOR.MINOR.PATCH (major = big changes, minor = small features/changes, patch = bug fixes)
-const VERSION = "v4.3.0"; // .slimesiege is now a binary SLIME container
+const VERSION = "v4.4.0"; // Vex evolves (loots orbs + RGB King orbs), Orbi removed
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -138,7 +138,7 @@ const CATALOG = [
   { name: "Atlas", title: "the Bulwark", role: "tank", color: "#7ab8ff", hat: "#1c3a6a", kind: "tank", ab: "Aegis", d: "Takes every hit for the party. Falls, then rises again" },
   { name: "Lumen", title: "the Cleric", role: "heal", color: "#fff2b0", hat: "#8a6a1a", kind: "cleric", ab: "Blessing", d: "Heals the party every 10s for 2× (20, 30, ...) and doubles every 30s" },
   { name: "Prism", title: "the Warder", role: "support", color: "#6fe8ff", hat: "#0e4a6a", kind: "ffield", ab: "Forcefield", d: "Whole party is invincible for 5s every 15s" },
-  { name: "Vex", title: "the Rogue", role: "attack", color: "#ff6a9a", hat: "#5a1633", kind: "dasher", ab: "Dagger Dash", d: "Darts at foes and slashes them" },
+  { name: "Vex", title: "the Rogue", role: "attack", color: "#ff6a9a", hat: "#5a1633", kind: "dasher", ab: "Dagger Dash", d: "Darts at foes · upgrade to loot orbs & RGB King orbs" },
   { name: "Bruno", title: "the Knight", role: "support", color: "#ff9a3c", hat: "#6a3a12", kind: "guard", ab: "Bulwark", d: "Blocks enemy shots, pulses a shockwave" },
   { name: "Chrono", title: "the Timekeeper", role: "support", color: "#5fe0c0", hat: "#145a4a", kind: "slow", ab: "Slow Aura", d: "Slows nearby foes by half" },
   { name: "Ember", title: "the Pyromancer", role: "attack", color: "#ff5a3a", hat: "#6a1408", kind: "fire", ab: "Fireball", d: "Explosive fireballs hit groups" },
@@ -149,13 +149,12 @@ const CATALOG = [
   { name: "Gale", title: "the Windcaller", role: "support", color: "#d8f4ff", hat: "#3a6a8a", kind: "gust", ab: "Gale Force", d: "Blasts foes away from you" },
   { name: "Volt", title: "the Spark", role: "attack", color: "#fff06a", hat: "#6a5a08", kind: "chain", ab: "Chain Zap", d: "Lightning jumps between foes" },
   { name: "Mystic", title: "the Seer", role: "buff", color: "#f09aff", hat: "#5a1a6a", kind: "dmgaura", ab: "Arcane Aura", d: "+15% damage for the party" },
-  { name: "Orbi", title: "the Collector", role: "buff", color: "#ff9bd8", hat: "#7a2a6a", kind: "grabber", ab: "Orb Grab", d: "Flies out and grabs the orbs enemies drop" },
   { name: "Rad", title: "the Reactor", role: "attack", color: "#b6ff6a", hat: "#2a5a10", kind: "reactor", ab: "Meltdown", d: "Press R to trigger a nuclear meltdown (costs half your HP, 150s cooldown)" },
   { name: "Lucky", title: "the Gambler", role: "buff", color: "#ffc83a", hat: "#6a4a08", kind: "xpaura", ab: "Lucky Charm", d: "+25% XP from gems" },
   { name: "Moss", title: "the Slimecaller", role: "attack", color: "#8cf08c", hat: "#245c2a", kind: "slimecaller", ab: "Slime Summon", d: "Summons friendly slimes that attack nearby foes and focus the Slime King" },
   { name: "Oculus", title: "the Farsighted", role: "buff", color: "#ff7a7a", hat: "#3a1030", kind: "tunnel", ab: "Tunnel Vision", d: "When the ShadowCaster blinds you, you keep a wide tunnel of sight instead of near-total darkness" },
 ];
-const UNLOCK_LV = { Atlas: 0, Lumen: 0, Ember: 0, Vex: 2, Bruno: 3, Frost: 4, Prism: 5, Sage: 6, Orbi: 8, Chrono: 10, Nyx: 12, Rocky: 14, Rad: 15, Gale: 17, Volt: 19, Mystic: 21, Lucky: 24, Moss: 9, Oculus: 35 };
+const UNLOCK_LV = { Atlas: 0, Lumen: 0, Ember: 0, Vex: 2, Bruno: 3, Frost: 4, Prism: 5, Sage: 6, Chrono: 10, Nyx: 12, Rocky: 14, Rad: 15, Gale: 17, Volt: 19, Mystic: 21, Lucky: 24, Moss: 9, Oculus: 35 };
 CATALOG.forEach(c => { c.lv = UNLOCK_LV[c.name] | 0; c.cost = 0; });
 const isUnlocked = c => !!(acct.wizards && acct.wizards[c.name]) || acctInfo().lvl >= (c.lv || 0);
 const DIFFS = [
@@ -1310,33 +1309,53 @@ function updateCompanions(dt) {
           }
         }
         break; }
-      case "grabber": {
-        let tg = null, bd = 1100 * 1100;
-        for (const g of G) { if (g.taken || g.t !== "gem") continue; const dx = g.x - c.x, dy = g.y - c.y, d2 = dx * dx + dy * dy; if (d2 < bd) { bd = d2; tg = g; } }
-        if (tg) {
-          c.mode = "grab"; const dx = tg.x - c.x, dy = tg.y - c.y, d = Math.hypot(dx, dy) || 1, stp = Math.min(d, 430 * dt);
-          c.x += dx / d * stp; c.y += dy / d * stp;
-          if (d < 20) { tg.taken = true; xp += tg.v * 1.4 * DF.xp * (hasComp("Lucky") ? 1.25 : 1); collectOrbCurrency(1); burst(tg.x, tg.y, 4, "#ff9bd8", 90, 0.35); gemCombo++; gemComboT = 0.4; }
-        } else if (c.mode === "grab") c.mode = "follow";
-        break; }
       case "reactor": break; // Activated manually with R
       case "cleric": {
         c.pt -= dt;
         if (c.pt <= 0) { c.pt = 10; c.n++; healParty(Math.min(99999, 2 * (10 + 5 * (c.n - 1)) * Math.pow(2, Math.floor(c.n / 3)) * wVitality(c))); }
         break; }
-      case "dasher":
-        if (c.mode === "follow") { if (c.cd <= 0) { const t = nearest(P.x, P.y, 300); if (t) { c.mode = "strike"; c.tgt = t; } else c.cd = 0.2; } }
-        else if (c.mode === "strike") {
+      case "dasher": {
+        const sp = wizardSpent("Vex"), tier = sp >= 12 ? 3 : sp >= 7 ? 2 : sp >= 3 ? 1 : 0;
+        if (c.vt === undefined) c.vt = tier; else if (tier > c.vt) { c.vt = tier; burst(c.x, c.y, 24, c.def.color, 200, 0.7); addText(c.x, c.y - 44, "Vex: " + ["", "Pickpocket!", "Treasure Hunter!", "Shadow Blade!"][tier], "#ffd0e0", 16); }
+        c.vt = tier; c.chain = c.chain || 0;
+        const lootTarget = () => {
+          let best = null, bd = 1e12;
+          if (tier >= 2) for (const g of G) { if (g.taken || g.t !== "kingorb") continue; const d2 = (g.x - c.x) ** 2 + (g.y - c.y) ** 2; if (d2 < bd && d2 < 2400 * 2400) { bd = d2; best = g; } }
+          if (best || tier < 1) return best;
+          bd = 1100 * 1100; for (const g of G) { if (g.taken || g.t !== "gem") continue; const d2 = (g.x - c.x) ** 2 + (g.y - c.y) ** 2; if (d2 < bd) { bd = d2; best = g; } }
+          return best;
+        };
+        if (c.mode === "follow") {
+          const lt = tier >= 2 ? lootTarget() : null;
+          if (lt && lt.t === "kingorb") { c.mode = "loot"; c.tgt = lt; }
+          else if (c.cd <= 0) { const t = nearest(P.x, P.y, 300 + 150 * tier); if (t) { c.mode = "strike"; c.tgt = t; c.chain = 0; } else { const gt = tier >= 1 ? lootTarget() : null; if (gt) { c.mode = "loot"; c.tgt = gt; } else c.cd = 0.2; } }
+        } else if (c.mode === "loot") {
+          let g = c.tgt; if (!g || g.taken) { g = lootTarget(); c.tgt = g; }
+          if (!g) { c.mode = "return"; break; }
+          const dx = g.x - c.x, dy = g.y - c.y, d = Math.hypot(dx, dy) || 1, stp = Math.min(d, (620 + 60 * tier) * dt);
+          c.x += dx / d * stp; c.y += dy / d * stp; if (Math.random() < 0.4) burst(c.x, c.y, 1, c.def.color, 20, 0.3);
+          if (d < 22) {
+            g.taken = true;
+            if (g.t === "kingorb") { collectKingOrb(g.c); burst(g.x, g.y, 18, ORB_COL[g.c], 180, 0.6); addText(g.x, g.y - 24, "Vex grabbed it!", ORB_COL[g.c], 14); }
+            else { xp += g.v * 1.4 * DF.xp * (hasComp("Lucky") ? 1.25 : 1); collectOrbCurrency(1); burst(g.x, g.y, 4, c.def.color, 90, 0.35); gemCombo++; gemComboT = 0.4; }
+            c.tgt = null;
+            if (!lootTarget()) c.mode = "return";
+          }
+          const ne = nearest(c.x, c.y, 60); if (ne && Math.random() < 0.1 && tier >= 1) dmgEnemy(ne, wPower(c, 14), ne.x - c.x, ne.y - c.y, 120);
+        } else if (c.mode === "strike") {
           const t = c.tgt;
           if (!t || t.dead) { c.mode = "return"; break; }
-          const dx = t.x - c.x, dy = t.y - c.y, d = Math.hypot(dx, dy) || 1, step = 760 * dt;
-          if (d < t.r + 14) { dmgEnemy(t, wPower(c, 30), dx, dy, 220); burst(t.x, t.y, 8, c.def.color, 150, 0.35); c.cd = 1.2; c.mode = "return"; }
-          else { c.x += dx / d * step; c.y += dy / d * step; burst(c.x, c.y, 1, c.def.color, 20, 0.3); }
+          const dx = t.x - c.x, dy = t.y - c.y, d = Math.hypot(dx, dy) || 1, step = (760 + 100 * tier) * dt;
+          if (d < t.r + 14) {
+            dmgEnemy(t, wPower(c, 30 * (1 + 0.35 * tier)), dx, dy, 220); burst(t.x, t.y, 8, c.def.color, 150, 0.35); c.cd = 1.2 * (1 - 0.15 * tier);
+            let nx = null, nd = 260 * 260; if (tier >= 3 && c.chain < 2) for (const e of E) { if (e.dead || e === t) continue; const d2 = (e.x - t.x) ** 2 + (e.y - t.y) ** 2; if (d2 < nd) { nd = d2; nx = e; } }
+            if (nx) { c.tgt = nx; c.chain++; } else { c.mode = "return"; c.chain = 0; }
+          } else { c.x += dx / d * step; c.y += dy / d * step; burst(c.x, c.y, 1, c.def.color, 20, 0.3); }
         } else if (c.mode === "return") {
           const dx = fx - c.x, dy = fy - c.y, d = Math.hypot(dx, dy) || 1;
           if (d < 30) c.mode = "follow"; else { const step = Math.min(700 * dt, d); c.x += dx / d * step; c.y += dy / d * step; }
         }
-        break;
+        break; }
       case "guard":
         if (c.cd <= 0) { c.cd = 4; RN.push({ x: c.x, y: c.y, r: 8, max: 100, sp: 360, dmg: 18, hit: new Set(), col: "255,160,60" }); beep(150, 0.2, "sine", 0.05, 100); }
         break;
@@ -2524,7 +2543,7 @@ function drawCompanions() {
   for (const c of CP) {
     const bob = Math.sin(time * 5 + c.t) * 3, k = c.def.kind, down = k === "tank" && c.hp <= 0;
     if (k === "slow") { ctx.strokeStyle = "rgba(95,224,192,.28)"; ctx.lineWidth = 3; ctx.setLineDash([10, 8]); ctx.lineDashOffset = -time * 20; ctx.beginPath(); ctx.arc(c.x, c.y, 150, 0, TAU); ctx.stroke(); ctx.setLineDash([]); }
-    if (k === "grabber") { ctx.strokeStyle = "rgba(255,155,216,.5)"; ctx.lineWidth = 2; ctx.setLineDash([5, 5]); ctx.beginPath(); ctx.arc(c.x, c.y, 24 + Math.sin(time * 5) * 2, 0, TAU); ctx.stroke(); ctx.setLineDash([]); }
+    if (k === "dasher" && (c.vt | 0) >= 1) { ctx.strokeStyle = "rgba(255,106,154,.5)"; ctx.lineWidth = 2; ctx.setLineDash([5, 5]); ctx.beginPath(); ctx.arc(c.x, c.y, 24 + Math.sin(time * 5) * 2, 0, TAU); ctx.stroke(); ctx.setLineDash([]); if (c.vt >= 2) for (let q = 0; q < 3; q++) { const a = time * 3 + q * TAU / 3; ctx.fillStyle = ORB_COL[q]; ctx.shadowColor = ORB_COL[q]; ctx.shadowBlur = 8; ctx.beginPath(); ctx.arc(c.x + Math.cos(a) * 28, c.y + Math.sin(a) * 28, 4, 0, TAU); ctx.fill(); ctx.shadowBlur = 0; } }
     if (k === "tunnel") { ctx.strokeStyle = "rgba(255,120,120,.45)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c.x, c.y, 24 + Math.sin(time * 4) * 3, 0, TAU); ctx.stroke(); ctx.fillStyle = "#ff4a4a"; ctx.beginPath(); ctx.arc(c.x, c.y - 6, 3, 0, TAU); ctx.fill(); }
     if (k === "dmgaura" || k === "xpaura") { ctx.strokeStyle = k === "dmgaura" ? "rgba(240,150,255,.4)" : "rgba(255,200,60,.4)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c.x, c.y, 26 + Math.sin(time * 4) * 3, 0, TAU); ctx.stroke(); }
     if (k === "cleric") {
@@ -2831,6 +2850,7 @@ function drawUpgradeScreen() {
     y += Math.ceil(unlocked.length / cols) * (bh + gap) + 10;
     const c = CATALOG.find(q => q.name === selectedWizardUpgrade && isUnlocked(q)) || unlocked[0], ranks = wizardRanks(c.name);
     miniWizard(W / 2, y + 18, c.color, c.hat, 0.58, 1); txt(c.name + " the " + c.title, W / 2, y + 48, 15, c.color); y += 62;
+    if (c.name === "Vex") { const sp = wizardSpent("Vex"), tn = sp >= 12 ? 3 : sp >= 7 ? 2 : sp >= 3 ? 1 : 0; txt("Evolves by total ranks (" + sp + "): 3 Pickpocket · 7 Treasure Hunter · 12 Shadow Blade", W / 2, y - 4, 10, "#ffd0e0"); txt(["Tier 0 · darts at foes", "Pickpocket · also loots gems", "Treasure Hunter · loots RGB King orbs, hunts wider", "Shadow Blade · chain strikes, fastest"][tn], W / 2, y + 10, 11, c.color); y += 24; }
     WIZ_UPS.forEach(u => { const r = ranks[u.id], cost = wizardUpgradeCost(r), can = r < 5 && acct.slimency >= cost, rh = 52;
       panel(x, y, pw, rh, "rgba(15,22,32,.94)", can ? "#c9a8ff" : "#3b5268");
       txt(u.icon + "  " + u.name + "  ·  Rank " + r + " / 5", x + 14, y + 17, 14, "#fff", "left"); txt(u.desc, x + 14, y + 37, 10, "#9fb4c6", "left");
@@ -2987,9 +3007,9 @@ function drawSettingsScreen() {
   }
   button(x, y, pw, 40, "💾  SAVE DATA  ·  Export / Import", () => { state = "savedata"; }, "#9fe6ff", 13); y += 52;
   panel(x, y, pw, 124, "rgba(15,22,32,.95)", "#3b5268");
-  txt("CHANGELOG · v4.3.0", x + 16, y + 18, 13, "#ffd23f", "left");
-  txt("• Cutscenes after every stage + on rebirth", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
-  txt("• .slimesiege: binary SLIME file format", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
+  txt("CHANGELOG · v4.4.0", x + 16, y + 18, 13, "#ffd23f", "left");
+  txt("• Orbi removed · cutscenes after stages", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
+  txt("• Vex evolves: loots gems + RGB King orbs", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
   txt("• Boss cutscenes · first clear = +10 ⟳", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
   txt("• Timer scales with difficulty (6–15 min)", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
   txt("• Rebirth · Ascended Rift Blade · lakes", x + 16, y + 111, 10.5, "#d8e6f2", "left", 600); y += 134;
