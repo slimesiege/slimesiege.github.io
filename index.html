@@ -19,7 +19,7 @@
 (() => {
 "use strict";
 // Versioning: MAJOR.MINOR.PATCH (major = big changes, minor = small features/changes, patch = bug fixes)
-const VERSION = "v5.0.3"; // L-Ctrl mouse lock (shift-lock)
+const VERSION = "v5.0.4"; // spider visibility fix, centre mouse lock
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -1860,7 +1860,7 @@ function update(dt) {
     e.kx *= Math.pow(0.003, dt); e.ky *= Math.pow(0.003, dt);
     pushOutOfZones(e); if (!FLYING[e.type] && !(e.type === "mole" && e.st === "under")) pushOutTerrain(e, e.r * 0.5);
     // far away? teleport back to ring
-    if (!(e.brood || e.type === "spiderling") && !isBig(e) && d > spawnRad() + 500) { const [x, y] = ringPos(spawnRad()); e.x = x; e.y = y; }
+    if ((isBig(e) ? d > spawnRad() + 900 : !(e.brood || e.type === "spiderling") && d > spawnRad() + 500)) { const [x, y] = ringPos(spawnRad()); e.x = x; e.y = y; }
     // contact
     if (Math.hypot(P.x - e.x, P.y - e.y) < e.r + 12) {
       if (e.type === "bomber") { e.dead = true; explode(e.x, e.y, 95, 40, true); }
@@ -2357,6 +2357,7 @@ function drawEnemy(e) {
 }
 function drawCrosshair() {
   if (!usingMouse || !(wl.knives || mlocked()) || state !== "play" || paused) return;
+  if (mlocked()) { ctx.save(); ctx.strokeStyle = "rgba(255,225,74,.25)"; ctx.lineWidth = 2; ctx.setLineDash([6, 8]); ctx.beginPath(); ctx.arc(W / 2, H / 2, LOCK_R, 0, TAU); ctx.stroke(); ctx.restore(); }
   const x = pointer.x, y = pointer.y; ctx.strokeStyle = "rgba(232,244,255,.85)"; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(x, y, 11, 0, TAU); ctx.moveTo(x - 17, y); ctx.lineTo(x - 6, y); ctx.moveTo(x + 6, y); ctx.lineTo(x + 17, y); ctx.moveTo(x, y - 17); ctx.lineTo(x, y - 6); ctx.moveTo(x, y + 6); ctx.lineTo(x, y + 17); ctx.stroke();
 }
@@ -2487,7 +2488,7 @@ function drawWorld() {
     else { ctx.font = (g.t === "chest" ? 30 : 20) + "px " + FONT; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText({ heart: "❤️", magnet: "🧲", chest: "🎁" }[g.t], g.x, g.y + bob); }
   }
   for (const r of RN) { const a = 1 - r.r / r.max; ctx.strokeStyle = `rgba(${r.col},${a})`; ctx.lineWidth = 8 * a + 2; ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, TAU); ctx.stroke(); ctx.fillStyle = `rgba(${r.col},${a * 0.18})`; ctx.fill(); }
-  const list = E.filter(e => vis(e.x, e.y, 80)).sort((a, b) => a.y - b.y);
+  const list = E.filter(e => vis(e.x, e.y, isBig(e) ? 420 : e.type === "spiderling" ? 120 : 80)).sort((a, b) => a.y - b.y);
   for (const e of list) { drawEnemy(e); if (e.stunT > 0) { const hy = e.y - (e.type === "shadow" || e.type === "cloud" || e.type === "evil" ? 175 : e.r * 1.5 + 12); ctx.save(); ctx.strokeStyle = "rgba(143,234,255,.8)"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(e.x, e.y - (e.type === "shadow" || e.type === "cloud" ? 40 : 0), e.r + 12 + Math.sin(time * 10) * 2, 0, TAU); ctx.stroke(); ctx.fillStyle = "#ffe14a"; for (let k = 0; k < 3; k++) { const a = time * 5 + k * TAU / 3; ctx.beginPath(); for (let q = 0; q < 10; q++) { const rr = q % 2 ? 3 : 7, aa = q * Math.PI / 5; ctx.lineTo(e.x + Math.cos(a) * 24 + Math.cos(aa) * rr, hy + Math.sin(a) * 6 + Math.sin(aa) * rr); } ctx.closePath(); ctx.fill(); } ctx.restore(); } for (const rz of RAD) if (Math.hypot(e.x - rz.x, e.y - rz.y) < rz.r) { ctx.fillStyle = "rgba(110,255,60,.38)"; ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 1.15, 0, TAU); ctx.fill(); break; } if (freeze > 0 || e.slowT > 0) { ctx.fillStyle = freeze > 0 ? "rgba(150,220,255,.45)" : "rgba(150,220,255,.28)"; ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 2, 0, TAU); ctx.fill(); } }
   drawPets();
   for (const s of FS) {
@@ -3141,9 +3142,9 @@ function drawSettingsScreen() {
   }
   button(x, y, pw, 40, "🍪  Cookie settings  ·  progress auto-saves", showCookieBanner, "#9fe6ff", 13); y += 52;
   panel(x, y, pw, 124, "rgba(15,22,32,.95)", "#3b5268");
-  txt("CHANGELOG · v5.0.3", x + 16, y + 18, 13, "#ffd23f", "left");
-  txt("• L-Ctrl = mouse lock: cursor hidden, aim by moving", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
-  txt("• Esc/pause/menus release the lock · Ctrl+W guard", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
+  txt("CHANGELOG · v5.0.4", x + 16, y + 18, 13, "#ffd23f", "left");
+  txt("• Giant Spider/bosses no longer vanish at screen edge", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
+  txt("• L-Ctrl lock: crosshair pinned around the centre", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
   txt("• G: fullscreen · sprint is Shift / touch button", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
   txt("• Story, Evil Nimbus, boss weather, cookies", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
   txt("• Spiders never despawn out of frame", x + 16, y + 111, 10.5, "#d8e6f2", "left", 600); y += 134;
@@ -4610,11 +4611,12 @@ function drawScenes() {
 /* ================= input ================= */
 // Browsers reserve Ctrl+W. Two guards: a "leave site?" prompt during a run, and Keyboard Lock in fullscreen (Chrome/Edge capture Ctrl+W there).
 addEventListener("beforeunload", e => { if (state === "play" || state === "cutscene") { saveAll(); e.preventDefault(); e.returnValue = ""; return ""; } });
+const LOCK_R = 150;
 function mlocked() { return document.pointerLockElement === cv; }
 function toggleMouseLock() {
   try {
     if (mlocked()) { document.exitPointerLock(); return; }
-    const a = Math.atan2(pointer.y - H / 2, pointer.x - W / 2), r = Math.max(120, Math.min(220, Math.hypot(pointer.x - W / 2, pointer.y - H / 2)));
+    const a = Math.atan2(pointer.y - H / 2, pointer.x - W / 2), r = LOCK_R;
     pointer.x = W / 2 + Math.cos(a) * r; pointer.y = H / 2 + Math.sin(a) * r; usingMouse = true;
     const p = cv.requestPointerLock({ unadjustedMovement: true });
     if (p && p.catch) p.catch(() => { try { cv.requestPointerLock(); } catch (_) {} });
@@ -4684,7 +4686,7 @@ addEventListener("keydown", e => {
 addEventListener("keyup", e => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; if (state === "play") paused = true; });
 cv.addEventListener("pointermove", e => {
-  if (mlocked()) { pointer.x = clamp(pointer.x + clamp(e.movementX || 0, -150, 150), 0, W); pointer.y = clamp(pointer.y + clamp(e.movementY || 0, -150, 150), 0, H); usingMouse = true; return; }
+  if (mlocked()) { let ox = pointer.x - W / 2 + clamp(e.movementX || 0, -150, 150), oy = pointer.y - H / 2 + clamp(e.movementY || 0, -150, 150); const ol = Math.hypot(ox, oy) || 1, k = Math.min(1, LOCK_R / ol); pointer.x = W / 2 + ox * k; pointer.y = H / 2 + oy * k; usingMouse = true; return; }
   pointer.x = e.clientX; pointer.y = e.clientY; if (e.pointerType === "mouse") usingMouse = true;
   if (menuDrag) { const dy = menuDrag.y - e.clientY; if (Math.abs(dy) > 8) menuDrag.moved = true; if (menuDrag.moved && menuDrag.so) menuDrag.so.s = clamp(menuDrag.s + dy, 0, menuDrag.so.max); }
   if (joy && e.pointerId === joy.id) { joy.x = e.clientX; joy.y = e.clientY; }
