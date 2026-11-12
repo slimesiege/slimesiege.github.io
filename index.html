@@ -19,7 +19,7 @@
 (() => {
 "use strict";
 // Versioning: MAJOR.MINOR.PATCH (major = big changes, minor = small features/changes, patch = bug fixes)
-const VERSION = "v5.0.0"; // animated interactive Story Mode, Evil Nimbus, cookies, weather
+const VERSION = "v5.0.1"; // L-Ctrl sprint lock made visible + fixed
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -322,7 +322,7 @@ function stat() {
 function startGame(h) {
   hero = h; audio(); DF = makeDF(diffIdx, stage); orbHeld = [false, false, false]; lastGain = null; PD = []; cowboysKilled = 0; run = { absorbed: 0, healed: 0, orbs: 0 }; endNote = "";
   wl = { [h.w]: 1 }; for (const id of Object.keys(acct.shop || {})) if (acct.shop[id] && WDEF[id]) wl[id] = Math.max(wl[id] || 0, 1); if (rbRank("ascend")) wl.blade = 1; pl = {}; cd = { bolt: 0.3, zap: 0.5, nova: 2, boom: 1, knives: 0.4, meteor: 0, blade: 0 }; reqKilled = 0; finalSpawned = false; finalDone = false; blindT = 0; blindA = 0; stageIntroT = 3; SW = []; LT = []; CR = []; AG = []; PETS = []; petSpawned = 0; waveN = 1; waveKills = 0; waveSpawned = 0; waveQuota = waveQuotaFor(1); waveBreak = 3; aegT = rnd(90, 140); TKILL.clear(); TERR.clear(); linkOn = false; linkSaid = false; swTick = 0; FZ = []; MT = []; fT = 0; RAD = []; MS = null; flashT = 0; sprintTog = false;
-  P = { x: 0, y: 0, hp: stat().maxhp, stam: stat().stamMax, exh: false, stR: 0, sprint: false, rdCD: 0, inv: 0, face: 1, fx: 0, fy: 1, moving: false, hurt: 0, abCD: 0, dfCD: 0, dfT: 0, storm: 0, stormT: 0, shieldT: 0, wind: 0 }; freeze = 0; if (rbRank("aegis")) AG.push({ x: 0, y: 0, r: 205, life: 10 + 8 * rbRank("aegis"), max: 10 + 8 * rbRank("aegis"), t: 0, fl: 0 });
+  P = { x: 0, y: 0, hp: stat().maxhp, stam: stat().stamMax, exh: false, stR: 0, sprint: false, rdCD: 0, inv: 0, face: 1, fx: 0, fy: 1, moving: false, hurt: 0, abCD: 0, dfCD: 0, dfT: 0, storm: 0, stormT: 0, shieldT: 0, wind: 0 }; freeze = 0; sprintTog = false; if (rbRank("aegis")) AG.push({ x: 0, y: 0, r: 205, life: 10 + 8 * rbRank("aegis"), max: 10 + 8 * rbRank("aegis"), t: 0, fl: 0 });
   E = []; S = []; ES = []; G = []; PT = []; TX = []; FX = []; RN = []; FS = [];
   time = 0; kills = 0; level = 1; xp = 0; xpNeed = 5; pending = 0; boss = null; shake = 0; hitStop = 0;
   if (endless) { WIN_TIME = Infinity; PACE = 1.25; } else { WIN_TIME = [360, 480, 600, 720, 900][diffIdx] || 600; PACE = (420 + 0.35 * (WIN_TIME - 240)) / WIN_TIME; }
@@ -2546,7 +2546,7 @@ function drawHUD() {
   ctx.fillStyle = P.hp < st.maxhp * 0.3 && Math.floor(time * 4) % 2 ? "#ff9a9a" : "#ff4a63"; ctx.fillRect(14, 26, hw * clamp(P.hp / st.maxhp, 0, 1), 20);
   ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.strokeRect(14, 26, hw, 20);
   txt(Math.ceil(P.hp) + " / " + st.maxhp, 14 + hw / 2, 36, 13, "#fff");
-  ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fillRect(14, 48, hw, 6); ctx.fillStyle = P.exh ? "#ff9a4a" : P.sprint ? "#ffe14a" : "#4ac8ff"; ctx.fillRect(14, 48, hw * clamp(P.stam / st.stamMax, 0, 1), 6);
+  ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fillRect(14, 48, hw, 6); ctx.fillStyle = P.exh ? "#ff9a4a" : P.sprint ? "#ffe14a" : "#4ac8ff"; ctx.fillRect(14, 48, hw * clamp(P.stam / st.stamMax, 0, 1), 6); if (!usingTouch) txt(sprintTog ? "🔒 SPRINT LOCK ON  (L-Ctrl)" : "L-Ctrl: sprint lock", 14, 62, 10, sprintTog ? "#ffe14a" : "rgba(159,180,198,.7)", "left", 700);
   ctx.strokeStyle = "rgba(255,255,255,.6)"; ctx.lineWidth = 1; ctx.strokeRect(14, 48, hw, 6);
   // items
   let ix = 14; const iy = H - 28;
@@ -2621,7 +2621,7 @@ function drawHUD() {
   if (SZ.length) txt("🛡 Safe zone " + Math.ceil(SZ[0].life) + "s", 14, 154, 12, "#9fe6ff", "left", 700);
   if (time < 9) { ctx.globalAlpha = clamp(9 - time, 0, 1);
     const hint1 = usingTouch ? "Drag anywhere to move  ·  tap the round buttons" : "WASD / arrows to move  ·  aim with the mouse" + (wl.knives ? " (knives)" : "");
-    const hint2 = usingTouch ? (hero.ab ? "Big button: " + hero.ab.name + "  ·  🛡 deflect  ·  🏃 sprint" : "🛡 deflect  ·  🏃 sprint") : (hero.ab ? "SPACE: " + hero.ab.name : "Orbs guard you") + "   SHIFT: sprint   F: deflect";
+    const hint2 = usingTouch ? (hero.ab ? "Big button: " + hero.ab.name + "  ·  🛡 deflect  ·  🏃 sprint" : "🛡 deflect  ·  🏃 sprint") : (hero.ab ? "SPACE: " + hero.ab.name : "Orbs guard you") + "   SHIFT: sprint   L-CTRL: sprint lock   F: deflect";
     const hy = usingTouch ? H * 0.7 : H - 112; txt(hint1, W / 2, hy, Math.min(16, W / 24), "#fff", "center", 700); txt(hint2, W / 2, hy + 24, Math.min(16, W / 24), "#fff", "center", 700); ctx.globalAlpha = 1; }
   if (state === "play" && !paused) {
     const bx = W - 30, by = 76, hov = pointer.x >= bx - 18 && pointer.x <= bx + 18 && pointer.y >= by - 18 && pointer.y <= by + 18;
@@ -2953,7 +2953,7 @@ function drawMenu() {
   txt("›", x0 + colW - 20, y + bh / 2, 30, "#c9a8ff");
   hit(x0, y, colW, bh, () => { state = "companions"; grids.cat.s = 0; beep(560, 0.08, "triangle", 0.05); });
   y += bh + 14;
-  txt(usingTouch ? "Tap to choose  ·  drag to scroll  ·  in a run: drag to move, tap the round buttons" : "Move: WASD / arrows   ·   Aim: mouse   ·   SPACE: ability   ·   SHIFT: sprint   ·   F: deflect   ·   R: Rad meltdown   ·   P: pause   ·   M: meteor if owned / mute   ·   ← → difficulty   ·   C: companions", W / 2, y + 6, clamp(W / 70, 9, 11), "#789", "center", 600);
+  txt(usingTouch ? "Tap to choose  ·  drag to scroll  ·  in a run: drag to move, tap the round buttons" : "Move: WASD / arrows   ·   Aim: mouse   ·   SPACE: ability   ·   SHIFT: sprint   ·   L-CTRL: sprint lock   ·   F: deflect   ·   R: Rad meltdown   ·   P: pause   ·   M: meteor if owned / mute   ·   ← → difficulty   ·   C: companions", W / 2, y + 6, clamp(W / 70, 9, 11), "#789", "center", 600);
   y += 26;
   menuS.max = Math.max(0, y - bot + 6); menuS.s = clamp(menuS.s, 0, menuS.max);
   ctx.restore();
@@ -3141,12 +3141,12 @@ function drawSettingsScreen() {
   }
   button(x, y, pw, 40, "🍪  Cookie settings  ·  progress auto-saves", showCookieBanner, "#9fe6ff", 13); y += 52;
   panel(x, y, pw, 124, "rgba(15,22,32,.95)", "#3b5268");
-  txt("CHANGELOG · v5.0.0", x + 16, y + 18, 13, "#ffd23f", "left");
-  txt("• Story Mode: animated, interactive cutscenes", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
-  txt("• Evil Nimbus final boss · Revenant replaces Cowboy", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
-  txt("• Boss weather: rain + fog · stormy Stage 2 story", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
-  txt("• Cookie saving (export/import removed)", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
-  txt("• L-Ctrl sprint lock · spiders never despawn", x + 16, y + 111, 10.5, "#d8e6f2", "left", 600); y += 134;
+  txt("CHANGELOG · v5.0.1", x + 16, y + 18, 13, "#ffd23f", "left");
+  txt("• L-Ctrl sprint lock: on-screen indicator + hints", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
+  txt("• Lock resets each run; works on any keyboard layout", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
+  txt("• Evil Nimbus final boss · Revenant replaces Cowboy", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
+  txt("• Story Mode, boss weather, cookie saving", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
+  txt("• Spiders never despawn out of frame", x + 16, y + 111, 10.5, "#d8e6f2", "left", 600); y += 134;
   button(W / 2 - 100, Math.min(H - 52, y + 4), 200, 40, "‹  Back", closeSettings, "#6bf0b0", 15);
 }
 function drawShopScreen() {
@@ -4625,7 +4625,7 @@ addEventListener("keydown", e => {
       if (c === "KeyM" && !paused && wl.meteor) triggerMeteor();
       if (c === "KeyB" && !paused && wl.blade) triggerBlade();
       if (c === "KeyK" && !paused) summonKing();
-      if (c === "ControlLeft" && !e.repeat && !paused) { sprintTog = !sprintTog; e.preventDefault(); }
+      if ((c === "ControlLeft" || (e.key === "Control" && e.location === 1)) && !paused) { sprintTog = !sprintTog; e.preventDefault(); }
       if (c === "KeyP" || c === "Escape") paused = !paused;
     } else if (state === "scenes") {
       if (c === "Escape") state = "menu";
