@@ -19,7 +19,7 @@
 (() => {
 "use strict";
 // Versioning: MAJOR.MINOR.PATCH (major = big changes, minor = small features/changes, patch = bug fixes)
-const VERSION = "v5.0.1"; // L-Ctrl sprint lock made visible + fixed
+const VERSION = "v5.0.3"; // L-Ctrl mouse lock (shift-lock)
 const cv = document.getElementById("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, DPR = 1;
 function resize() {
@@ -1174,7 +1174,7 @@ function drawSprintBtn() {
   ctx.fillStyle = "rgba(15,22,32,.88)"; ctx.beginPath(); ctx.arc(bx, by, R, 0, TAU); ctx.fill();
   ctx.lineWidth = 4; ctx.strokeStyle = sprintTog ? "#ffe14a" : "rgba(255,255,255,.2)"; ctx.beginPath(); ctx.arc(bx, by, R, 0, TAU); ctx.stroke();
   ctx.font = "22px " + FONT; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("🏃", bx, by - 1);
-  txt(sprintTog ? "sprint ON" : usingTouch ? "SPRINT" : "SHIFT / L-CTRL", bx, by + R + 10, 10, sprintTog ? "#ffe14a" : "#9fb4c6");
+  txt(sprintTog ? "sprint ON" : usingTouch ? "SPRINT" : "SHIFT", bx, by + R + 10, 10, sprintTog ? "#ffe14a" : "#9fb4c6");
 }
 function drawScreenFx() {
   if (flashT > 0) { ctx.fillStyle = "rgba(255,255,230," + clamp(flashT, 0, 1) * 0.75 + ")"; ctx.fillRect(0, 0, W, H); }
@@ -2356,7 +2356,7 @@ function drawEnemy(e) {
   }
 }
 function drawCrosshair() {
-  if (!usingMouse || !wl.knives || state !== "play" || paused) return;
+  if (!usingMouse || !(wl.knives || mlocked()) || state !== "play" || paused) return;
   const x = pointer.x, y = pointer.y; ctx.strokeStyle = "rgba(232,244,255,.85)"; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(x, y, 11, 0, TAU); ctx.moveTo(x - 17, y); ctx.lineTo(x - 6, y); ctx.moveTo(x + 6, y); ctx.lineTo(x + 17, y); ctx.moveTo(x, y - 17); ctx.lineTo(x, y - 6); ctx.moveTo(x, y + 6); ctx.lineTo(x, y + 17); ctx.stroke();
 }
@@ -2546,7 +2546,7 @@ function drawHUD() {
   ctx.fillStyle = P.hp < st.maxhp * 0.3 && Math.floor(time * 4) % 2 ? "#ff9a9a" : "#ff4a63"; ctx.fillRect(14, 26, hw * clamp(P.hp / st.maxhp, 0, 1), 20);
   ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.strokeRect(14, 26, hw, 20);
   txt(Math.ceil(P.hp) + " / " + st.maxhp, 14 + hw / 2, 36, 13, "#fff");
-  ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fillRect(14, 48, hw, 6); ctx.fillStyle = P.exh ? "#ff9a4a" : P.sprint ? "#ffe14a" : "#4ac8ff"; ctx.fillRect(14, 48, hw * clamp(P.stam / st.stamMax, 0, 1), 6); if (!usingTouch) txt(sprintTog ? "🔒 SPRINT LOCK ON  (L-Ctrl)" : "L-Ctrl: sprint lock", 14, 62, 10, sprintTog ? "#ffe14a" : "rgba(159,180,198,.7)", "left", 700);
+  ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fillRect(14, 48, hw, 6); ctx.fillStyle = P.exh ? "#ff9a4a" : P.sprint ? "#ffe14a" : "#4ac8ff"; ctx.fillRect(14, 48, hw * clamp(P.stam / st.stamMax, 0, 1), 6); if (!usingTouch) txt(mlocked() ? "🔒 MOUSE LOCKED  (L-Ctrl / Esc to release)" : "L-Ctrl: mouse lock", 14, 62, 10, mlocked() ? "#ffe14a" : "rgba(159,180,198,.7)", "left", 700);
   ctx.strokeStyle = "rgba(255,255,255,.6)"; ctx.lineWidth = 1; ctx.strokeRect(14, 48, hw, 6);
   // items
   let ix = 14; const iy = H - 28;
@@ -2621,7 +2621,7 @@ function drawHUD() {
   if (SZ.length) txt("🛡 Safe zone " + Math.ceil(SZ[0].life) + "s", 14, 154, 12, "#9fe6ff", "left", 700);
   if (time < 9) { ctx.globalAlpha = clamp(9 - time, 0, 1);
     const hint1 = usingTouch ? "Drag anywhere to move  ·  tap the round buttons" : "WASD / arrows to move  ·  aim with the mouse" + (wl.knives ? " (knives)" : "");
-    const hint2 = usingTouch ? (hero.ab ? "Big button: " + hero.ab.name + "  ·  🛡 deflect  ·  🏃 sprint" : "🛡 deflect  ·  🏃 sprint") : (hero.ab ? "SPACE: " + hero.ab.name : "Orbs guard you") + "   SHIFT: sprint   L-CTRL: sprint lock   F: deflect";
+    const hint2 = usingTouch ? (hero.ab ? "Big button: " + hero.ab.name + "  ·  🛡 deflect  ·  🏃 sprint" : "🛡 deflect  ·  🏃 sprint") : (hero.ab ? "SPACE: " + hero.ab.name : "Orbs guard you") + "   SHIFT: sprint   L-CTRL: mouse lock   F: deflect   G: fullscreen";
     const hy = usingTouch ? H * 0.7 : H - 112; txt(hint1, W / 2, hy, Math.min(16, W / 24), "#fff", "center", 700); txt(hint2, W / 2, hy + 24, Math.min(16, W / 24), "#fff", "center", 700); ctx.globalAlpha = 1; }
   if (state === "play" && !paused) {
     const bx = W - 30, by = 76, hov = pointer.x >= bx - 18 && pointer.x <= bx + 18 && pointer.y >= by - 18 && pointer.y <= by + 18;
@@ -2953,7 +2953,7 @@ function drawMenu() {
   txt("›", x0 + colW - 20, y + bh / 2, 30, "#c9a8ff");
   hit(x0, y, colW, bh, () => { state = "companions"; grids.cat.s = 0; beep(560, 0.08, "triangle", 0.05); });
   y += bh + 14;
-  txt(usingTouch ? "Tap to choose  ·  drag to scroll  ·  in a run: drag to move, tap the round buttons" : "Move: WASD / arrows   ·   Aim: mouse   ·   SPACE: ability   ·   SHIFT: sprint   ·   L-CTRL: sprint lock   ·   F: deflect   ·   R: Rad meltdown   ·   P: pause   ·   M: meteor if owned / mute   ·   ← → difficulty   ·   C: companions", W / 2, y + 6, clamp(W / 70, 9, 11), "#789", "center", 600);
+  txt(usingTouch ? "Tap to choose  ·  drag to scroll  ·  in a run: drag to move, tap the round buttons" : "Move: WASD / arrows   ·   Aim: mouse   ·   SPACE: ability   ·   SHIFT: sprint   ·   L-CTRL: mouse lock   ·   F: deflect   ·   R: Rad meltdown   ·   P: pause   ·   M: meteor if owned / mute   ·   ← → difficulty   ·   C: companions", W / 2, y + 6, clamp(W / 70, 9, 11), "#789", "center", 600);
   y += 26;
   menuS.max = Math.max(0, y - bot + 6); menuS.s = clamp(menuS.s, 0, menuS.max);
   ctx.restore();
@@ -3141,11 +3141,11 @@ function drawSettingsScreen() {
   }
   button(x, y, pw, 40, "🍪  Cookie settings  ·  progress auto-saves", showCookieBanner, "#9fe6ff", 13); y += 52;
   panel(x, y, pw, 124, "rgba(15,22,32,.95)", "#3b5268");
-  txt("CHANGELOG · v5.0.1", x + 16, y + 18, 13, "#ffd23f", "left");
-  txt("• L-Ctrl sprint lock: on-screen indicator + hints", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
-  txt("• Lock resets each run; works on any keyboard layout", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
-  txt("• Evil Nimbus final boss · Revenant replaces Cowboy", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
-  txt("• Story Mode, boss weather, cookie saving", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
+  txt("CHANGELOG · v5.0.3", x + 16, y + 18, 13, "#ffd23f", "left");
+  txt("• L-Ctrl = mouse lock: cursor hidden, aim by moving", x + 16, y + 39, 10.5, "#d8e6f2", "left", 600);
+  txt("• Esc/pause/menus release the lock · Ctrl+W guard", x + 16, y + 57, 10.5, "#d8e6f2", "left", 600);
+  txt("• G: fullscreen · sprint is Shift / touch button", x + 16, y + 75, 10.5, "#d8e6f2", "left", 600);
+  txt("• Story, Evil Nimbus, boss weather, cookies", x + 16, y + 93, 10.5, "#d8e6f2", "left", 600);
   txt("• Spiders never despawn out of frame", x + 16, y + 111, 10.5, "#d8e6f2", "left", 600); y += 134;
   button(W / 2 - 100, Math.min(H - 52, y + 4), 200, 40, "‹  Back", closeSettings, "#6bf0b0", 15);
 }
@@ -4608,6 +4608,24 @@ function drawScenes() {
 }
 
 /* ================= input ================= */
+// Browsers reserve Ctrl+W. Two guards: a "leave site?" prompt during a run, and Keyboard Lock in fullscreen (Chrome/Edge capture Ctrl+W there).
+addEventListener("beforeunload", e => { if (state === "play" || state === "cutscene") { saveAll(); e.preventDefault(); e.returnValue = ""; return ""; } });
+function mlocked() { return document.pointerLockElement === cv; }
+function toggleMouseLock() {
+  try {
+    if (mlocked()) { document.exitPointerLock(); return; }
+    const a = Math.atan2(pointer.y - H / 2, pointer.x - W / 2), r = Math.max(120, Math.min(220, Math.hypot(pointer.x - W / 2, pointer.y - H / 2)));
+    pointer.x = W / 2 + Math.cos(a) * r; pointer.y = H / 2 + Math.sin(a) * r; usingMouse = true;
+    const p = cv.requestPointerLock({ unadjustedMovement: true });
+    if (p && p.catch) p.catch(() => { try { cv.requestPointerLock(); } catch (_) {} });
+  } catch (_) {}
+}
+function toggleFs() {
+  try {
+    if (document.fullscreenElement) { document.exitFullscreen(); if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock(); }
+    else document.documentElement.requestFullscreen().then(() => { if (navigator.keyboard && navigator.keyboard.lock) navigator.keyboard.lock().catch(() => {}); }).catch(() => {});
+  } catch (_) {}
+}
 const pointer = { x: -999, y: -999 };
 function scrollObj() { return state === "scenes" ? galS : state === "menu" ? menuS : state === "rebirth" ? rbS : state === "companions" ? grids.cat : (state === "recruit" && recAll) ? grids.rec : null; }
 function clickRects() { for (const r of rects) if (pointer.x >= r.x && pointer.x <= r.x + r.w && pointer.y >= r.y && pointer.y <= r.y + r.h) { r.fn(); return true; } return false; }
@@ -4618,6 +4636,7 @@ addEventListener("keydown", e => {
   if (!e.repeat) {
     const c = e.code, dm = /^(?:Digit|Numpad)(\d)$/.exec(c), num = dm ? parseInt(dm[1], 10) : 0;
     if (c === "KeyM" && !(state === "play" && wl.meteor)) muted = !muted;
+    if (c === "KeyG" && (state === "play" || state === "menu")) toggleFs();
     if (state === "play") {
       if (c === "Space" && !paused) useAbility();
       if (c === "KeyF" && !paused) deflect();
@@ -4625,7 +4644,7 @@ addEventListener("keydown", e => {
       if (c === "KeyM" && !paused && wl.meteor) triggerMeteor();
       if (c === "KeyB" && !paused && wl.blade) triggerBlade();
       if (c === "KeyK" && !paused) summonKing();
-      if ((c === "ControlLeft" || (e.key === "Control" && e.location === 1)) && !paused) { sprintTog = !sprintTog; e.preventDefault(); }
+      if ((c === "ControlLeft" || (e.key === "Control" && e.location === 1)) && !paused) { toggleMouseLock(); e.preventDefault(); }
       if (c === "KeyP" || c === "Escape") paused = !paused;
     } else if (state === "scenes") {
       if (c === "Escape") state = "menu";
@@ -4665,12 +4684,13 @@ addEventListener("keydown", e => {
 addEventListener("keyup", e => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; if (state === "play") paused = true; });
 cv.addEventListener("pointermove", e => {
+  if (mlocked()) { pointer.x = clamp(pointer.x + clamp(e.movementX || 0, -150, 150), 0, W); pointer.y = clamp(pointer.y + clamp(e.movementY || 0, -150, 150), 0, H); usingMouse = true; return; }
   pointer.x = e.clientX; pointer.y = e.clientY; if (e.pointerType === "mouse") usingMouse = true;
   if (menuDrag) { const dy = menuDrag.y - e.clientY; if (Math.abs(dy) > 8) menuDrag.moved = true; if (menuDrag.moved && menuDrag.so) menuDrag.so.s = clamp(menuDrag.s + dy, 0, menuDrag.so.max); }
   if (joy && e.pointerId === joy.id) { joy.x = e.clientX; joy.y = e.clientY; }
 });
 cv.addEventListener("pointerdown", e => {
-  audio(); pointer.x = e.clientX; pointer.y = e.clientY;
+  audio(); if (!mlocked()) { pointer.x = e.clientX; pointer.y = e.clientY; }
   usingMouse = e.pointerType === "mouse"; if (!usingMouse) usingTouch = true; else usingTouch = false;
   if (state === "cutscene") { csPointer(); return; }
   if (state === "upgrades" || state === "wizardUpgrades" || state === "settings" || state === "shop" || state === "rebirth" || state === "resetConfirm1" || state === "resetConfirm2") { clickRects(); return; }
@@ -4690,7 +4710,7 @@ cv.addEventListener("pointerdown", e => {
 const endJoy = e => { if (joy && e.pointerId === joy.id) joy = null; };
 cv.addEventListener("pointerup", e => {
   if (state === "cutscene") csPtrUp();
-  endJoy(e); pointer.x = e.clientX; pointer.y = e.clientY;
+  endJoy(e); if (!mlocked()) { pointer.x = e.clientX; pointer.y = e.clientY; }
   if (menuDrag) { const d = menuDrag; menuDrag = null; if (!d.moved) clickRects(); }
 });
 cv.addEventListener("pointercancel", e => { if (state === "cutscene") csPtrUp(); endJoy(e); menuDrag = null; });
@@ -4699,6 +4719,7 @@ cv.addEventListener("wheel", e => { const so = scrollObj(); if (so) { so.s = cla
 /* ================= loop ================= */
 let last = performance.now();
 function frame(now) {
+  if ((state !== "play" || paused) && document.pointerLockElement) { try { document.exitPointerLock(); } catch (_) {} }
   const dt = Math.min(0.05, (now - last) / 1000); last = now; menuT += dt; if (savedFlash > 0) savedFlash -= dt;
   if (state === "play" && !paused) { update(dt); updateFx(dt); }
   else if (state === "cutscene") csUpdate(dt);
